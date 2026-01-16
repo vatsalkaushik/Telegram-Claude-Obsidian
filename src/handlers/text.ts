@@ -5,11 +5,7 @@
 import type { Context } from "grammy";
 import { ALLOWED_USERS } from "../config";
 import { isAuthorized, rateLimiter } from "../security";
-import {
-  auditLog,
-  auditLogRateLimit,
-  checkInterrupt,
-} from "../utils";
+import { auditLog, auditLogRateLimit } from "../utils";
 import { appendDailyEntry } from "../vault";
 
 /**
@@ -31,13 +27,7 @@ export async function handleText(ctx: Context): Promise<void> {
     return;
   }
 
-  // 2. Check for interrupt prefix
-  message = await checkInterrupt(message);
-  if (!message.trim()) {
-    return;
-  }
-
-  // Commands are handled elsewhere
+  // 2. Commands are handled elsewhere
   if (message.startsWith("/")) {
     return;
   }

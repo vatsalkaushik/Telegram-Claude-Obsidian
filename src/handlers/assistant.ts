@@ -95,10 +95,7 @@ export async function handleAssistantMessage(
 
       console.error("Error processing message:", error);
       if (errorStr.includes("abort") || errorStr.includes("cancel")) {
-        const wasInterrupt = session.consumeInterruptFlag();
-        if (!wasInterrupt) {
-          await ctx.reply("🛑 Query stopped.");
-        }
+        await ctx.reply("🛑 Query stopped.");
       } else {
         await ctx.reply(`❌ Error: ${errorStr.slice(0, 200)}`);
       }

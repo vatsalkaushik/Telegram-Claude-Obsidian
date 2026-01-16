@@ -14,7 +14,10 @@ import { createMediaGroupBuffer } from "./media-group";
 import { appendDailyEntry, getDateTimeInfo } from "../vault";
 
 // Create photo-specific media group buffer
-const photoBuffer = createMediaGroupBuffer({
+const photoBuffer = createMediaGroupBuffer<{
+  fullPath: string;
+  relativePath: string;
+}>({
   emoji: "📷",
   itemLabel: "photo",
   itemLabelPlural: "photos",

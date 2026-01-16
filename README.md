@@ -48,7 +48,6 @@ Recommended:
 - `/claude` - Assistant mode (search/action)
 - `/tz` - Set timezone (e.g., `/tz Asia/Kolkata`)
 
-Tip: use `!` prefix to interrupt a running query.
 
 ## Vault Layout
 

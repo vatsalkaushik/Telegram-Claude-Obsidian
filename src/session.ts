@@ -79,7 +79,6 @@ class ClaudeSession {
   private isQueryRunning = false;
   private stopRequested = false;
   private _isProcessing = false;
-  private _wasInterruptedByNewMessage = false;
 
   get isActive(): boolean {
     return this.sessionId !== null;
@@ -90,28 +89,7 @@ class ClaudeSession {
   }
 
   /**
-   * Check if the last stop was triggered by a new message interrupt (! prefix).
-   * Resets the flag when called. Also clears stopRequested so new messages can proceed.
-   */
-  consumeInterruptFlag(): boolean {
-    const was = this._wasInterruptedByNewMessage;
-    this._wasInterruptedByNewMessage = false;
-    if (was) {
-      // Clear stopRequested so the new message can proceed
-      this.stopRequested = false;
-    }
-    return was;
-  }
-
-  /**
-   * Mark that this stop is from a new message interrupt.
-   */
-  markInterrupt(): void {
-    this._wasInterruptedByNewMessage = true;
-  }
-
-  /**
-   * Clear the stopRequested flag (used after interrupt to allow new message to proceed).
+   * Clear the stopRequested flag after stopping a query.
    */
   clearStopRequested(): void {
     this.stopRequested = false;

@@ -198,39 +198,3 @@ export function startTypingIndicator(ctx: Context): TypingController {
     },
   };
 }
-
-// ============== Message Interrupt ==============
-
-// Import session lazily to avoid circular dependency
-let sessionModule: {
-  session: {
-    isRunning: boolean;
-    stop: () => Promise<"stopped" | "pending" | false>;
-    markInterrupt: () => void;
-    clearStopRequested: () => void;
-  };
-} | null = null;
-
-export async function checkInterrupt(text: string): Promise<string> {
-  if (!text || !text.startsWith("!")) {
-    return text;
-  }
-
-  // Lazy import to avoid circular dependency
-  if (!sessionModule) {
-    sessionModule = await import("./session");
-  }
-
-  const strippedText = text.slice(1).trimStart();
-
-  if (sessionModule.session.isRunning) {
-    console.log("! prefix - interrupting current query");
-    sessionModule.session.markInterrupt();
-    await sessionModule.session.stop();
-    await Bun.sleep(100);
-    // Clear stopRequested so the new message can proceed
-    sessionModule.session.clearStopRequested();
-  }
-
-  return strippedText;
-}

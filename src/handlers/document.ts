@@ -137,6 +137,10 @@ async function processDocuments(
     let entry: string;
     if (documents.length === 1) {
       const doc = documents[0];
+      if (!doc) {
+        await ctx.reply("❌ Failed to process document.");
+        return;
+      }
       const link = `[[${doc.relativePath}]]`;
       const excerpt = await extractText(doc.fullPath, doc.mimeType);
       const formattedExcerpt = formatExcerpt(excerpt);

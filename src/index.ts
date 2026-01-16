@@ -36,10 +36,6 @@ bot.use(
       }
       return undefined;
     }
-    // Messages with ! prefix bypass queue (interrupt)
-    if (ctx.message?.text?.startsWith("!")) {
-      return undefined;
-    }
     // Callback queries (button clicks) are not sequentialized
     if (ctx.callbackQuery) {
       return undefined;
