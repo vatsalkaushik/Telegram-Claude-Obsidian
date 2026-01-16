@@ -28,19 +28,21 @@ export async function handleStart(ctx: Context): Promise<void> {
 
   await ctx.reply(
     `🤖 <b>Obsidian Telegram Assistant</b>\n\n` +
+      `Default: any message is saved to today's daily note.\n` +
+      `Assistant mode: use /claude for questions or actions.\n\n` +
       `Status: ${status}\n` +
       `Working directory: <code>${workDir}</code>\n\n` +
       `<b>Commands:</b>\n` +
-      `/new - Start fresh session\n` +
-      `/stop - Stop current query\n` +
-      `/status - Show detailed status\n` +
-      `/resume - Resume last session\n` +
-      `/claude - Assistant mode (search/action)\n` +
-      `/tz - Set timezone (e.g., /tz Asia/Kolkata)\n\n` +
-      `<b>Tips:</b>\n` +
-      `• Prefix with <code>!</code> to interrupt current query\n` +
-      `• Use "think" keyword for extended reasoning\n` +
-      `• Send photos, voice, or documents`,
+      `/claude &lt;message&gt; - Ask questions, search, or act in the vault\n` +
+      `/new - Reset the /claude conversation\n` +
+      `/stop - Stop a running /claude response\n` +
+      `/resume - Resume a saved /claude session after restart\n` +
+      `/tz &lt;Region/City&gt; - Set timezone (e.g., /tz Asia/Kolkata)\n` +
+      `/status - Show session status\n\n` +
+      `<b>Examples:</b>\n` +
+      `Leaving for the airport → saved to Daily with timestamp\n` +
+      `/claude What did I do last Tuesday? → search and answer\n` +
+      `[[gym]] Did squats 5x5 → adds [[gym]] to Links.md`,
     { parse_mode: "HTML" }
   );
 }

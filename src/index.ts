@@ -52,6 +52,7 @@ bot.use(
 // ============== Command Handlers ==============
 
 bot.command("start", handleStart);
+bot.command("help", handleStart);
 bot.command("new", handleNew);
 bot.command("stop", handleStop);
 bot.command("status", handleStatus);

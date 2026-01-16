@@ -40,7 +40,7 @@ Recommended:
 
 ## Commands
 
-- `/start` - Show status and commands
+- `/start` or `/help` - Show status and commands
 - `/new` - Start a fresh Claude session
 - `/stop` - Stop the current query
 - `/status` - Show session status
@@ -71,7 +71,35 @@ If you type `[[something]]` in a message, it is appended to `Links.md`.
 
 See `docs/setup-vps.md` for Hetzner + Git sync instructions.
 
+### Updating the Bot on VPS
+
+After pushing changes from your local machine:
+
+```bash
+ssh claude@YOUR_SERVER_IP
+cd /home/claude/bot
+git pull
+bun install
+sudo systemctl restart claude-telegram
+```
+
+### Useful VPS Commands
+
+```bash
+# Check bot status
+sudo systemctl status claude-telegram
+
+# View live logs
+sudo journalctl -u claude-telegram -f
+
+# Restart bot
+sudo systemctl restart claude-telegram
+
+# Check disk usage
+df -h
+```
+
 ## Security
 
 This bot runs Claude Code with permissions bypassed inside the allowed paths.
-Set `ALLOWED_PATHS` carefully and review `SECURITY.md` before deploying.
+Set `ALLOWED_PATHS` carefully and review `docs/SECURITY.md` before deploying.
