@@ -72,7 +72,8 @@ function normalizeLinkTerm(raw: string): string {
 
 export function extractWikilinks(text: string): string[] {
   const results: string[] = [];
-  const pattern = /\[\[([^\]]+?)\]\]/g;
+  // Negative lookbehind to exclude embeds like ![[image.jpg]]
+  const pattern = /(?<!!)\[\[([^\]]+?)\]\]/g;
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
     const term = normalizeLinkTerm(match[1] || "");
