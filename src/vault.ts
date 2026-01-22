@@ -222,22 +222,19 @@ export async function appendDailyEntry(
   rawText: string
 ): Promise<{ filePath: string; dateStamp: string; timeStamp: string }> {
   const { dateStamp, timeStamp, weekday } = await getDateTimeInfo();
-  const filePath = join(DAILY_DIR, `${dateStamp}.md`);
+  const filePath = join(DAILY_DIR, `${dateStamp}, ${weekday}.md`);
 
   await mkdir(dirname(filePath), { recursive: true });
 
-  let prefix = "";
   let needsNewline = false;
 
   try {
     const existing = await readFile(filePath, "utf-8");
-    if (!existing.trim()) {
-      prefix = `# ${dateStamp}, ${weekday}\n\n`;
-    } else if (!existing.endsWith("\n")) {
+    if (existing && !existing.endsWith("\n")) {
       needsNewline = true;
     }
   } catch {
-    prefix = `# ${dateStamp}, ${weekday}\n\n`;
+    // File doesn't exist yet, will be created
   }
 
   const newLinks = extractWikilinks(rawText);
@@ -246,7 +243,7 @@ export async function appendDailyEntry(
   const linkedText = autoLinkText(rawText, linkTerms);
   const entryLine = `[${timeStamp}] ${linkedText}\n`;
 
-  const payload = `${prefix}${needsNewline ? "\n" : ""}${entryLine}`;
+  const payload = `${needsNewline ? "\n" : ""}${entryLine}`;
   await appendFile(filePath, payload);
 
   return { filePath, dateStamp, timeStamp };
