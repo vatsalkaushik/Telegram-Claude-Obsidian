@@ -77,7 +77,8 @@ export function extractWikilinks(text: string): string[] {
   let match: RegExpExecArray | null;
   while ((match = pattern.exec(text)) !== null) {
     const term = normalizeLinkTerm(match[1] || "");
-    if (term) {
+    // Skip attachment paths (files in Attachments folder)
+    if (term && !term.startsWith("Attachments/")) {
       results.push(term);
     }
   }
