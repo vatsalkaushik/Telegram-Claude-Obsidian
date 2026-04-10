@@ -29,11 +29,12 @@ export async function handleStart(ctx: Context): Promise<void> {
   await ctx.reply(
     `🤖 <b>Obsidian Telegram Assistant</b>\n\n` +
       `Default: any message is saved to today's daily note.\n` +
-      `Assistant mode: use /claude for questions or actions.\n\n` +
+      `Assistant mode: each /claude starts a fresh chat.\n` +
+      `Reply to a Claude answer to continue that specific chat.\n\n` +
       `Status: ${status}\n` +
       `Working directory: <code>${workDir}</code>\n\n` +
       `<b>Commands:</b>\n` +
-      `/claude &lt;message&gt; - Ask questions, search, or act in the vault\n` +
+      `/claude &lt;message&gt; - Start a fresh Claude chat\n` +
       `/new - Reset the /claude conversation\n` +
       `/stop - Stop a running /claude response\n` +
       `/resume - Resume a saved /claude session after restart\n` +
@@ -41,7 +42,8 @@ export async function handleStart(ctx: Context): Promise<void> {
       `/status - Show session status\n\n` +
       `<b>Examples:</b>\n` +
       `Leaving for the airport → saved to Daily with timestamp\n` +
-      `/claude What did I do last Tuesday? → search and answer\n` +
+      `/claude What did I do last Tuesday? → starts a new Claude thread\n` +
+      `Reply "and Wednesday?" to that answer → continues the same thread\n` +
       `[[gym]] Did squats 5x5 → adds [[gym]] to Links.md`,
     { parse_mode: "HTML" }
   );
@@ -70,7 +72,7 @@ export async function handleNew(ctx: Context): Promise<void> {
   // Clear session
   await session.kill();
 
-  await ctx.reply("🆕 Session cleared. Next message starts fresh.");
+  await ctx.reply("🆕 Selected Claude session cleared.");
 }
 
 /**
@@ -205,7 +207,7 @@ export async function handleClaude(ctx: Context): Promise<void> {
   }
 
   const message = (ctx.match || "").toString().trim();
-  await handleAssistantMessage(ctx, message);
+  await handleAssistantMessage(ctx, message, { forceNewSession: true });
 }
 
 /**

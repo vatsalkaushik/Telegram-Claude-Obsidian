@@ -221,6 +221,7 @@ export const RATE_LIMIT_WINDOW = parseInt(
 
 export const SESSION_FILE = "/tmp/claude-telegram-session.json";
 export const TEMP_DIR = "/tmp/telegram-bot";
+export const REPLY_ROUTES_FILE = `${TEMP_DIR}/reply-routes.json`;
 
 // Temp paths that are always allowed for bot operations
 export const TEMP_PATHS = ["/tmp/", "/private/tmp/", "/var/folders/"];

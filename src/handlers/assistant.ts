@@ -6,12 +6,19 @@ import type { Context } from "grammy";
 import { session } from "../session";
 import { ALLOWED_USERS } from "../config";
 import { isAuthorized, rateLimiter } from "../security";
+import { registerClaudeReplyTargets } from "../reply-routes";
 import { auditLog, auditLogRateLimit, startTypingIndicator } from "../utils";
 import { StreamingState, createStatusCallback } from "./streaming";
 
+export interface AssistantMessageOptions {
+  forceNewSession?: boolean;
+  resumeSessionId?: string;
+}
+
 export async function handleAssistantMessage(
   ctx: Context,
-  message: string
+  message: string,
+  options: AssistantMessageOptions = {}
 ): Promise<void> {
   const userId = ctx.from?.id;
   const username = ctx.from?.username || "unknown";
@@ -43,6 +50,12 @@ export async function handleAssistantMessage(
     return;
   }
 
+  if (options.forceNewSession) {
+    await session.kill();
+  } else if (options.resumeSessionId) {
+    session.selectSession(options.resumeSessionId);
+  }
+
   // 3. Store message for retry
   session.lastMessage = trimmed;
 
@@ -69,6 +82,14 @@ export async function handleAssistantMessage(
       );
 
       await auditLog(userId, username, "CLAUDE", trimmed, response);
+
+      if (session.sessionId) {
+        await registerClaudeReplyTargets(
+          state.getFinalMessages().map((msg) => msg.message_id),
+          session.sessionId
+        );
+      }
+
       break;
     } catch (error) {
       const errorStr = String(error);
@@ -87,6 +108,9 @@ export async function handleAssistantMessage(
           `Claude Code crashed, retrying (attempt ${attempt + 2}/${MAX_RETRIES + 1})...`
         );
         await session.kill();
+        if (options.resumeSessionId) {
+          session.selectSession(options.resumeSessionId);
+        }
         await ctx.reply(`⚠️ Claude crashed, retrying...`);
         state = new StreamingState();
         statusCallback = createStatusCallback(ctx, state);

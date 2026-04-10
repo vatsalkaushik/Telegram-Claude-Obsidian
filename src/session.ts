@@ -89,6 +89,16 @@ class ClaudeSession {
   }
 
   /**
+   * Select an existing Claude session to continue.
+   */
+  selectSession(sessionId: string | null): void {
+    this.sessionId = sessionId;
+    if (sessionId) {
+      this.lastActivity = new Date();
+    }
+  }
+
+  /**
    * Clear the stopRequested flag after stopping a query.
    */
   clearStopRequested(): void {

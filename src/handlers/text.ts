@@ -5,8 +5,10 @@
 import type { Context } from "grammy";
 import { ALLOWED_USERS } from "../config";
 import { isAuthorized, rateLimiter } from "../security";
+import { getReplyRoute } from "../reply-routes";
 import { auditLog, auditLogRateLimit } from "../utils";
 import { appendDailyEntry } from "../vault";
+import { handleAssistantMessage } from "./assistant";
 
 /**
  * Handle incoming text messages.
@@ -32,7 +34,19 @@ export async function handleText(ctx: Context): Promise<void> {
     return;
   }
 
-  // 3. Rate limit check
+  // 3. Reply routing
+  const replyToMessageId = ctx.message?.reply_to_message?.message_id;
+  if (replyToMessageId) {
+    const route = getReplyRoute(replyToMessageId);
+    if (route?.kind === "claude") {
+      await handleAssistantMessage(ctx, message, {
+        resumeSessionId: route.target,
+      });
+      return;
+    }
+  }
+
+  // 4. Rate limit check
   const [allowed, retryAfter] = rateLimiter.check(userId);
   if (!allowed) {
     await auditLogRateLimit(userId, username, retryAfter!);
@@ -42,7 +56,7 @@ export async function handleText(ctx: Context): Promise<void> {
     return;
   }
 
-  // 4. Append to daily note
+  // 5. Append to daily note
   try {
     const { dateStamp, timeStamp } = await appendDailyEntry(message.trim());
     await auditLog(userId, username, "CAPTURE", message);

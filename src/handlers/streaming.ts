@@ -22,6 +22,25 @@ export class StreamingState {
   toolMessages: Message[] = []; // ephemeral tool status messages
   lastEditTimes = new Map<number, number>(); // segment_id -> last edit time
   lastContent = new Map<number, string>(); // segment_id -> last sent content
+  responseMessages = new Map<number, Message[]>(); // segment_id -> visible assistant messages
+
+  getFinalMessages(): Message[] {
+    const orderedSegments = [...this.responseMessages.keys()].sort((a, b) => a - b);
+    const seen = new Set<number>();
+    const messages: Message[] = [];
+
+    for (const segmentId of orderedSegments) {
+      const segmentMessages = this.responseMessages.get(segmentId) || [];
+      for (const message of segmentMessages) {
+        if (!seen.has(message.message_id)) {
+          seen.add(message.message_id);
+          messages.push(message);
+        }
+      }
+    }
+
+    return messages;
+  }
 }
 
 /**
@@ -60,12 +79,14 @@ export function createStatusCallback(
             const msg = await ctx.reply(formatted, { parse_mode: "HTML" });
             state.textMessages.set(segmentId, msg);
             state.lastContent.set(segmentId, formatted);
+            state.responseMessages.set(segmentId, [msg]);
           } catch (htmlError) {
             // HTML parse failed, fall back to plain text
             console.debug("HTML reply failed, using plain text:", htmlError);
             const msg = await ctx.reply(formatted);
             state.textMessages.set(segmentId, msg);
             state.lastContent.set(segmentId, formatted);
+            state.responseMessages.set(segmentId, [msg]);
           }
           state.lastEditTimes.set(segmentId, now);
         } else if (now - lastEdit > STREAMING_THROTTLE_MS) {
@@ -106,9 +127,46 @@ export function createStatusCallback(
           state.lastEditTimes.set(segmentId, now);
         }
       } else if (statusType === "segment_end" && segmentId !== undefined) {
-        if (state.textMessages.has(segmentId) && content) {
-          const msg = state.textMessages.get(segmentId)!;
+        if (content) {
           const formatted = convertMarkdownToHtml(content);
+
+          if (!state.textMessages.has(segmentId)) {
+            if (formatted.length <= TELEGRAM_MESSAGE_LIMIT) {
+              try {
+                const msg = await ctx.reply(formatted, { parse_mode: "HTML" });
+                state.textMessages.set(segmentId, msg);
+                state.lastContent.set(segmentId, formatted);
+                state.responseMessages.set(segmentId, [msg]);
+              } catch (htmlError) {
+                console.debug("HTML final reply failed, using plain text:", htmlError);
+                const msg = await ctx.reply(formatted);
+                state.textMessages.set(segmentId, msg);
+                state.lastContent.set(segmentId, formatted);
+                state.responseMessages.set(segmentId, [msg]);
+              }
+              return;
+            }
+
+            const chunkMessages: Message[] = [];
+            for (let i = 0; i < formatted.length; i += TELEGRAM_SAFE_LIMIT) {
+              const chunk = formatted.slice(i, i + TELEGRAM_SAFE_LIMIT);
+              try {
+                const msg = await ctx.reply(chunk, { parse_mode: "HTML" });
+                chunkMessages.push(msg);
+              } catch (htmlError) {
+                console.debug(
+                  "HTML chunk failed, using plain text:",
+                  htmlError
+                );
+                const msg = await ctx.reply(chunk);
+                chunkMessages.push(msg);
+              }
+            }
+            state.responseMessages.set(segmentId, chunkMessages);
+            return;
+          }
+
+          const msg = state.textMessages.get(segmentId)!;
 
           // Skip if content unchanged
           if (formatted === state.lastContent.get(segmentId)) {
@@ -125,6 +183,8 @@ export function createStatusCallback(
                   parse_mode: "HTML",
                 }
               );
+              state.lastContent.set(segmentId, formatted);
+              state.responseMessages.set(segmentId, [msg]);
             } catch (error) {
               console.debug("Failed to edit final message:", error);
             }
@@ -135,18 +195,24 @@ export function createStatusCallback(
             } catch (error) {
               console.debug("Failed to delete message for splitting:", error);
             }
+
+            const chunkMessages: Message[] = [];
             for (let i = 0; i < formatted.length; i += TELEGRAM_SAFE_LIMIT) {
               const chunk = formatted.slice(i, i + TELEGRAM_SAFE_LIMIT);
               try {
-                await ctx.reply(chunk, { parse_mode: "HTML" });
+                const chunkMsg = await ctx.reply(chunk, { parse_mode: "HTML" });
+                chunkMessages.push(chunkMsg);
               } catch (htmlError) {
                 console.debug(
                   "HTML chunk failed, using plain text:",
                   htmlError
                 );
-                await ctx.reply(chunk);
+                const chunkMsg = await ctx.reply(chunk);
+                chunkMessages.push(chunkMsg);
               }
             }
+
+            state.responseMessages.set(segmentId, chunkMessages);
           }
         }
       } else if (statusType === "done") {
