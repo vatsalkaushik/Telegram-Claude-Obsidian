@@ -35,6 +35,7 @@ export async function handleStart(ctx: Context): Promise<void> {
       `Working directory: <code>${workDir}</code>\n\n` +
       `<b>Commands:</b>\n` +
       `/claude &lt;message&gt; - Start a fresh Claude chat\n` +
+      `/meal &lt;description&gt; - Log a meal with macro estimates\n` +
       `/new - Reset the /claude conversation\n` +
       `/stop - Stop a running /claude response\n` +
       `/resume - Resume a saved /claude session after restart\n` +
@@ -44,6 +45,8 @@ export async function handleStart(ctx: Context): Promise<void> {
       `Leaving for the airport → saved to Daily with timestamp\n` +
       `/claude What did I do last Tuesday? → starts a new Claude thread\n` +
       `Reply "and Wednesday?" to that answer → continues the same thread\n` +
+      `/meal 2 scoops whey with water → logs a meal\n` +
+      `Photo caption "/meal ate half" → analyzes the meal photo\n` +
       `[[gym]] Did squats 5x5 → adds [[gym]] to Links.md`,
     { parse_mode: "HTML" }
   );

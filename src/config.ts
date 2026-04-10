@@ -58,6 +58,15 @@ export const LINKS_FILE =
   process.env.LINKS_FILE || resolve(VAULT_DIR, "Links.md");
 export const BOT_SETTINGS_FILE =
   process.env.BOT_SETTINGS_FILE || resolve(VAULT_DIR, ".bot", "settings.json");
+export const MEAL_DATA_DIR =
+  process.env.MEAL_DATA_DIR || resolve(VAULT_DIR, ".bot", "meals");
+export const MEAL_REFERENCE_FOODS_FILE =
+  process.env.MEAL_REFERENCE_FOODS_FILE ||
+  resolve(VAULT_DIR, "reference_foods.md");
+export const MEAL_MODEL_PRIMARY =
+  process.env.MEAL_MODEL_PRIMARY || "gpt-5.4-mini";
+export const MEAL_MODEL_FALLBACK =
+  process.env.MEAL_MODEL_FALLBACK || "gpt-5.4";
 
 // ============== Claude CLI Path ==============
 
@@ -172,6 +181,7 @@ export const TRANSCRIPTION_PROMPT = TRANSCRIPTION_CONTEXT
   : BASE_TRANSCRIPTION_PROMPT;
 
 export const TRANSCRIPTION_AVAILABLE = !!OPENAI_API_KEY;
+export const MEAL_ANALYSIS_AVAILABLE = !!OPENAI_API_KEY;
 
 // ============== Thinking Keywords ==============
 

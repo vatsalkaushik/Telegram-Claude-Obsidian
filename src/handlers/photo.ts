@@ -12,11 +12,14 @@ import { isAuthorized, rateLimiter } from "../security";
 import { auditLog, auditLogRateLimit } from "../utils";
 import { createMediaGroupBuffer } from "./media-group";
 import { appendDailyEntry, getDateTimeInfo } from "../vault";
+import { extractMealCommandText, handleMealPhotos } from "./meal";
 
 // Create photo-specific media group buffer
 const photoBuffer = createMediaGroupBuffer<{
   fullPath: string;
   relativePath: string;
+  telegramFileId?: string;
+  sourceMessageId: number;
 }>({
   emoji: "📷",
   itemLabel: "photo",
@@ -44,6 +47,8 @@ async function buildPhotoPath(): Promise<{
 async function downloadPhoto(ctx: Context): Promise<{
   fullPath: string;
   relativePath: string;
+  telegramFileId?: string;
+  sourceMessageId: number;
 }> {
   const photos = ctx.message?.photo;
   if (!photos || photos.length === 0) {
@@ -61,7 +66,12 @@ async function downloadPhoto(ctx: Context): Promise<{
   const buffer = await response.arrayBuffer();
   await Bun.write(fullPath, buffer);
 
-  return { fullPath, relativePath };
+  return {
+    fullPath,
+    relativePath,
+    telegramFileId: photos[photos.length - 1]?.file_id,
+    sourceMessageId: ctx.message?.message_id || 0,
+  };
 }
 
 /**
@@ -69,7 +79,12 @@ async function downloadPhoto(ctx: Context): Promise<{
  */
 async function processPhotos(
   ctx: Context,
-  photoPaths: Array<{ fullPath: string; relativePath: string }>,
+  photoPaths: Array<{
+    fullPath: string;
+    relativePath: string;
+    telegramFileId?: string;
+    sourceMessageId: number;
+  }>,
   caption: string | undefined,
   userId: number,
   username: string,
@@ -77,6 +92,26 @@ async function processPhotos(
 ): Promise<void> {
   void chatId;
   try {
+    const mealNote = extractMealCommandText(caption);
+    if (mealNote !== null) {
+      await handleMealPhotos(
+        ctx,
+        photoPaths.map((photo) => ({
+          fullPath: photo.fullPath,
+          relativePath: photo.relativePath,
+          telegramFileId: photo.telegramFileId,
+        })),
+        mealNote,
+        {
+        skipRateLimit: true,
+          sourceMessageIds: photoPaths
+            .map((photo) => photo.sourceMessageId)
+            .filter((id) => id > 0),
+        }
+      );
+      return;
+    }
+
     const embeds = photoPaths
       .map((p) => `![[${p.relativePath}]]`)
       .join(" ");
@@ -112,6 +147,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
 
   // 2. For single photos, show status and rate limit early
   let statusMsg: Awaited<ReturnType<typeof ctx.reply>> | null = null;
+  const mealCaption = extractMealCommandText(ctx.message?.caption);
   if (!mediaGroupId) {
     console.log(`Received photo from @${username}`);
     // Rate limit
@@ -125,11 +161,18 @@ export async function handlePhoto(ctx: Context): Promise<void> {
     }
 
     // Show status immediately
-    statusMsg = await ctx.reply("📷 Processing image...");
+    statusMsg = await ctx.reply(
+      mealCaption !== null ? "🍽️ Analyzing meal..." : "📷 Processing image..."
+    );
   }
 
   // 3. Download photo
-  let photoPath: { fullPath: string; relativePath: string };
+  let photoPath: {
+    fullPath: string;
+    relativePath: string;
+    telegramFileId?: string;
+    sourceMessageId: number;
+  };
   try {
     photoPath = await downloadPhoto(ctx);
   } catch (error) {
@@ -153,6 +196,30 @@ export async function handlePhoto(ctx: Context): Promise<void> {
 
   // 4. Single photo - process immediately
   if (!mediaGroupId && statusMsg) {
+    if (mealCaption !== null) {
+      await handleMealPhotos(
+        ctx,
+        [
+          {
+            fullPath: photoPath.fullPath,
+            relativePath: photoPath.relativePath,
+            telegramFileId: photoPath.telegramFileId,
+          },
+        ],
+        mealCaption,
+        {
+          skipRateLimit: true,
+          sourceMessageIds:
+            typeof ctx.message?.message_id === "number" ? [ctx.message.message_id] : [],
+          statusMessage: {
+            chatId: statusMsg.chat.id,
+            messageId: statusMsg.message_id,
+          },
+        }
+      );
+      return;
+    }
+
     await processPhotos(
       ctx,
       [photoPath],
@@ -161,7 +228,6 @@ export async function handlePhoto(ctx: Context): Promise<void> {
       username,
       chatId
     );
-
     // Clean up status message
     try {
       await ctx.api.deleteMessage(statusMsg.chat.id, statusMsg.message_id);

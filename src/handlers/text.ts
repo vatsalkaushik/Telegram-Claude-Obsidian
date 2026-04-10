@@ -9,6 +9,12 @@ import { getReplyRoute } from "../reply-routes";
 import { auditLog, auditLogRateLimit } from "../utils";
 import { appendDailyEntry } from "../vault";
 import { handleAssistantMessage } from "./assistant";
+import {
+  extractMealCommandText,
+  handleMealCommand,
+  handleMealCorrection,
+  tryMergePendingMealReply,
+} from "./meal";
 
 /**
  * Handle incoming text messages.
@@ -29,15 +35,24 @@ export async function handleText(ctx: Context): Promise<void> {
     return;
   }
 
-  // 2. Commands are handled elsewhere
-  if (message.startsWith("/")) {
-    return;
-  }
-
-  // 3. Reply routing
+  // 2. Reply routing
   const replyToMessageId = ctx.message?.reply_to_message?.message_id;
   if (replyToMessageId) {
+    const pendingMealText = extractMealCommandText(message) ?? message;
+    if (
+      await tryMergePendingMealReply(ctx, replyToMessageId, pendingMealText)
+    ) {
+      return;
+    }
+
     const route = getReplyRoute(replyToMessageId);
+    if (route?.kind === "meal") {
+      await handleMealCorrection(ctx, pendingMealText, {
+        mealId: route.mealId,
+        dateStamp: route.dateStamp,
+      });
+      return;
+    }
     if (route?.kind === "claude") {
       await handleAssistantMessage(ctx, message, {
         resumeSessionId: route.target,
@@ -46,7 +61,19 @@ export async function handleText(ctx: Context): Promise<void> {
     }
   }
 
-  // 4. Rate limit check
+  // 3. /meal is handled inline so photo captions can own their own flow
+  const mealCommandText = extractMealCommandText(message);
+  if (mealCommandText !== null) {
+    await handleMealCommand(ctx);
+    return;
+  }
+
+  // 4. Other commands are handled elsewhere
+  if (message.startsWith("/")) {
+    return;
+  }
+
+  // 5. Rate limit check
   const [allowed, retryAfter] = rateLimiter.check(userId);
   if (!allowed) {
     await auditLogRateLimit(userId, username, retryAfter!);
@@ -56,7 +83,7 @@ export async function handleText(ctx: Context): Promise<void> {
     return;
   }
 
-  // 5. Append to daily note
+  // 6. Append to daily note
   try {
     const { dateStamp, timeStamp } = await appendDailyEntry(message.trim());
     await auditLog(userId, username, "CAPTURE", message);

@@ -13,6 +13,12 @@ export type ReplyRoute =
       kind: "claude";
       target: string;
       updatedAt: string;
+    }
+  | {
+      kind: "meal";
+      mealId: string;
+      dateStamp: string;
+      updatedAt: string;
     };
 
 const MAX_ROUTES = 500;
@@ -53,7 +59,15 @@ async function loadRoutes(): Promise<void> {
 
     for (const [messageId, route] of Object.entries(parsed)) {
       const numericId = Number.parseInt(messageId, 10);
-      if (!Number.isNaN(numericId) && route?.kind === "claude" && route.target) {
+      if (Number.isNaN(numericId)) {
+        continue;
+      }
+
+      if (route?.kind === "claude" && route.target) {
+        replyRoutes.set(numericId, route);
+      }
+
+      if (route?.kind === "meal" && route.mealId && route.dateStamp) {
         replyRoutes.set(numericId, route);
       }
     }
@@ -83,6 +97,29 @@ export async function registerClaudeReplyTargets(
     replyRoutes.set(messageId, {
       kind: "claude",
       target: sessionId,
+      updatedAt: now,
+    });
+  }
+
+  pruneRoutes();
+  await persistRoutes();
+}
+
+export async function registerMealReplyTargets(
+  messageIds: number[],
+  mealId: string,
+  dateStamp: string
+): Promise<void> {
+  if (!mealId || !dateStamp || messageIds.length === 0) {
+    return;
+  }
+
+  const now = new Date().toISOString();
+  for (const messageId of messageIds) {
+    replyRoutes.set(messageId, {
+      kind: "meal",
+      mealId,
+      dateStamp,
       updatedAt: now,
     });
   }

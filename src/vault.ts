@@ -205,8 +205,12 @@ export async function setTimezone(timeZone: string): Promise<void> {
 }
 
 export async function getDateTimeInfo(): Promise<DateTimeInfo> {
+  return getDateTimeInfoForDate(new Date());
+}
+
+export async function getDateTimeInfoForDate(date: Date): Promise<DateTimeInfo> {
   const timeZone = await getEffectiveTimezone();
-  const parts = getZonedParts(new Date(), timeZone);
+  const parts = getZonedParts(date, timeZone);
   const dateStamp = `${parts.year}-${parts.month}-${parts.day}`;
   const timeStamp = `${parts.hour}:${parts.minute}`;
   const monthStamp = `${parts.year}-${parts.month}`;
@@ -220,11 +224,15 @@ export async function getDateTimeInfo(): Promise<DateTimeInfo> {
   };
 }
 
+export function getDailyNotePath(dateStamp: string, weekday: string): string {
+  return join(DAILY_DIR, `${dateStamp}, ${weekday}.md`);
+}
+
 export async function appendDailyEntry(
   rawText: string
 ): Promise<{ filePath: string; dateStamp: string; timeStamp: string }> {
   const { dateStamp, timeStamp, weekday } = await getDateTimeInfo();
-  const filePath = join(DAILY_DIR, `${dateStamp}, ${weekday}.md`);
+  const filePath = getDailyNotePath(dateStamp, weekday);
 
   await mkdir(dirname(filePath), { recursive: true });
 
