@@ -32,6 +32,8 @@ export type DateTimeInfo = {
   weekday: string;
 };
 
+const dailyNoteWriteQueues = new Map<string, Promise<void>>();
+
 function escapeRegExp(value: string): string {
   return value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 }
@@ -228,24 +230,32 @@ export function getDailyNotePath(dateStamp: string, weekday: string): string {
   return join(DAILY_DIR, `${dateStamp}, ${weekday}.md`);
 }
 
+export async function updateDailyNoteFile<T>(
+  filePath: string,
+  operation: () => Promise<T>
+): Promise<T> {
+  const previous = dailyNoteWriteQueues.get(filePath) || Promise.resolve();
+  const run = previous.catch(() => {}).then(operation);
+  const nextTail = run.then(
+    () => undefined,
+    () => undefined
+  );
+  dailyNoteWriteQueues.set(filePath, nextTail);
+
+  try {
+    return await run;
+  } finally {
+    if (dailyNoteWriteQueues.get(filePath) === nextTail) {
+      dailyNoteWriteQueues.delete(filePath);
+    }
+  }
+}
+
 export async function appendDailyEntry(
   rawText: string
 ): Promise<{ filePath: string; dateStamp: string; timeStamp: string }> {
   const { dateStamp, timeStamp, weekday } = await getDateTimeInfo();
   const filePath = getDailyNotePath(dateStamp, weekday);
-
-  await mkdir(dirname(filePath), { recursive: true });
-
-  let needsNewline = false;
-
-  try {
-    const existing = await readFile(filePath, "utf-8");
-    if (existing && !existing.endsWith("\n")) {
-      needsNewline = true;
-    }
-  } catch {
-    // File doesn't exist yet, will be created
-  }
 
   const newLinks = extractWikilinks(rawText);
   await addLinkTerms(newLinks);
@@ -253,8 +263,23 @@ export async function appendDailyEntry(
   const linkedText = autoLinkText(rawText, linkTerms);
   const entryLine = `[${timeStamp}] ${linkedText}\n`;
 
-  const payload = `${needsNewline ? "\n" : ""}${entryLine}`;
-  await appendFile(filePath, payload);
+  await updateDailyNoteFile(filePath, async () => {
+    await mkdir(dirname(filePath), { recursive: true });
+
+    let needsNewline = false;
+
+    try {
+      const existing = await readFile(filePath, "utf-8");
+      if (existing && !existing.endsWith("\n")) {
+        needsNewline = true;
+      }
+    } catch {
+      // File doesn't exist yet, will be created
+    }
+
+    const payload = `${needsNewline ? "\n" : ""}${entryLine}`;
+    await appendFile(filePath, payload);
+  });
 
   return { filePath, dateStamp, timeStamp };
 }

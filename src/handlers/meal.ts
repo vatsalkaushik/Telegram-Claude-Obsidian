@@ -187,12 +187,17 @@ async function checkMealRateLimit(
 async function sendMealSummary(
   ctx: Context,
   entry: MealEntry,
-  updated = false
+  updated = false,
+  extraReplyTargetIds: number[] = []
 ): Promise<void> {
   const reply = await ctx.reply(buildMealSummary(entry, updated), {
     parse_mode: "HTML",
   });
-  await registerMealReplyTargets([reply.message_id], entry.id, entry.dateStamp);
+  await registerMealReplyTargets(
+    [reply.message_id, ...extraReplyTargetIds],
+    entry.id,
+    entry.dateStamp
+  );
 }
 
 async function createMealEntry(
@@ -233,7 +238,7 @@ async function finalizePendingMealJob(
 ): Promise<void> {
   await addMealEntry(entry);
   await removePendingStatus(job.ctx, job.statusMessage);
-  await sendMealSummary(job.ctx, entry);
+  await sendMealSummary(job.ctx, entry, false, job.sourceMessageIds);
   await auditLog(
     job.userId,
     job.username,
@@ -356,7 +361,12 @@ export async function handleMealCommand(ctx: Context): Promise<void> {
     const entry = await createMealEntry(note, [], getMessageDate(ctx));
     await addMealEntry(entry);
     await ctx.api.deleteMessage(status.chat.id, status.message_id).catch(() => {});
-    await sendMealSummary(ctx, entry);
+    await sendMealSummary(
+      ctx,
+      entry,
+      false,
+      typeof ctx.message?.message_id === "number" ? [ctx.message.message_id] : []
+    );
     await auditLog(access.userId, access.username, "MEAL", note);
   } catch (error) {
     console.error("Meal command failed:", error);
@@ -386,6 +396,7 @@ export async function handleMealPhotos(
 ): Promise<void> {
   const access = await checkMealAccess(ctx);
   if (!access) {
+    await removePendingStatus(ctx, options.statusMessage);
     return;
   }
 
@@ -393,6 +404,7 @@ export async function handleMealPhotos(
     !options.skipRateLimit &&
     !(await checkMealRateLimit(ctx, access.userId, access.username))
   ) {
+    await removePendingStatus(ctx, options.statusMessage);
     return;
   }
 

@@ -31,7 +31,7 @@ bot.use(
     // Commands are not sequentialized - they work immediately
     if (ctx.message?.text?.startsWith("/")) {
       const command = ctx.message.text.split(/\s+/)[0]?.toLowerCase();
-      if (command === "/claude") {
+      if (command === "/claude" || command === "/meal") {
         return ctx.chat?.id.toString();
       }
       return undefined;
