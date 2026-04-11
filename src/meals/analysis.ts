@@ -13,10 +13,9 @@ import {
   MEAL_REFERENCE_FOODS_FILE,
   OPENAI_API_KEY,
 } from "../config";
-import type { MealAnalysisResult, MealPhoto } from "./types";
+import type { MealAnalysisResult, MealPhoto, MealType } from "./types";
 
 const MealAnalysisSchema = z.object({
-  mealType: z.enum(["Breakfast", "Lunch", "Dinner", "Snack"]),
   items: z.array(z.string().min(1)).min(1),
   calories: z.number().min(0),
   protein: z.number().min(0),
@@ -83,13 +82,95 @@ function buildDeveloperPrompt(referenceFoods: string): string {
     "Estimate the amount actually consumed, not the amount served.",
     "Use the user note and any correction text to adjust portions or ingredients.",
     "Use reference foods exactly when they clearly match a branded or named staple.",
-    "Infer mealType from the meal itself, time, and note.",
+    "Do not classify meal type; that is handled separately.",
     "Confidence rules:",
     "- high: clearly identifiable food and portion, or exact reference-food match",
     "- medium: identifiable food but portions or composition are somewhat ambiguous",
     "- low: dish or portion is too ambiguous for a reliable estimate",
     referenceSection,
   ].join("\n");
+}
+
+function getExplicitMealType(text: string | undefined): MealType | null {
+  if (!text) {
+    return null;
+  }
+
+  const normalized = text.trim().toLowerCase();
+  const explicitPatterns: Array<{ mealType: MealType; aliases: string[] }> = [
+    { mealType: "Snack", aliases: ["snack"] },
+    { mealType: "Breakfast", aliases: ["breakfast", "brunch"] },
+    { mealType: "Lunch", aliases: ["lunch"] },
+    { mealType: "Dinner", aliases: ["dinner", "supper"] },
+  ];
+
+  for (const { mealType, aliases } of explicitPatterns) {
+    const aliasPattern = `(?:${aliases.join("|")})`;
+    const directLabel = new RegExp(
+      `^(?:meal\\s*type\\s*[:=-]\\s*)?${aliasPattern}(?:\\s*[:,-]|$)`
+    );
+    const explicitMention = new RegExp(
+      `\\b(?:this|it|meal)\\s+(?:was|is)\\s+(?:an?\\s+)?${aliasPattern}\\b` +
+        `|\\b(?:actually|just)\\s+(?:an?\\s+)?${aliasPattern}\\b`
+    );
+
+    if (directLabel.test(normalized) || explicitMention.test(normalized)) {
+      return mealType;
+    }
+  }
+
+  return null;
+}
+
+function getCapturedHour(capturedAt: string, timeZone: string): number {
+  const date = new Date(capturedAt);
+  if (Number.isNaN(date.getTime())) {
+    return new Date().getHours();
+  }
+
+  const formatter = new Intl.DateTimeFormat("en-US", {
+    timeZone,
+    hour: "2-digit",
+    hour12: false,
+  });
+
+  const hour = formatter.formatToParts(date).find((part) => part.type === "hour")?.value;
+  const parsedHour = Number.parseInt(hour || "", 10);
+  return Number.isNaN(parsedHour) ? date.getHours() : parsedHour;
+}
+
+function deriveMealType(input: AnalyzeMealInput): MealType {
+  const explicitType =
+    getExplicitMealType(input.correctionText) || getExplicitMealType(input.note);
+  if (explicitType) {
+    return explicitType;
+  }
+
+  const hour = getCapturedHour(input.capturedAt, input.timeZone);
+
+  if (hour < 5) {
+    return "Snack";
+  }
+
+  if (hour < 11) {
+    return "Breakfast";
+  }
+
+  if (hour < 17) {
+    return "Lunch";
+  }
+
+  return "Dinner";
+}
+
+function buildAnalysisResult(
+  parsed: ParsedMealAnalysis,
+  input: AnalyzeMealInput
+): MealAnalysisResult {
+  return {
+    ...parsed,
+    mealType: deriveMealType(input),
+  };
 }
 
 async function runAnalysis(
@@ -158,22 +239,24 @@ export async function analyzeMeal(
 ): Promise<AnalyzeMealOutput> {
   const mustUseFallback = !!input.correctionText;
   if (mustUseFallback) {
+    const parsed = await runAnalysis(MEAL_MODEL_FALLBACK, input);
     return {
-      analysis: await runAnalysis(MEAL_MODEL_FALLBACK, input),
+      analysis: buildAnalysisResult(parsed, input),
       model: MEAL_MODEL_FALLBACK,
     };
   }
 
   const primary = await runAnalysis(MEAL_MODEL_PRIMARY, input);
   if (primary.confidence === "low") {
+    const fallback = await runAnalysis(MEAL_MODEL_FALLBACK, input);
     return {
-      analysis: await runAnalysis(MEAL_MODEL_FALLBACK, input),
+      analysis: buildAnalysisResult(fallback, input),
       model: MEAL_MODEL_FALLBACK,
     };
   }
 
   return {
-    analysis: primary,
+    analysis: buildAnalysisResult(primary, input),
     model: MEAL_MODEL_PRIMARY,
   };
 }
