@@ -13,6 +13,21 @@ import {
 
 export type VaultSettings = {
   timezone?: string;
+  mealSummary?: MealSummarySettings;
+};
+
+export type MealSummaryTarget = {
+  userId: number;
+  chatId: number;
+  username?: string;
+  chatType: string;
+  updatedAt: string;
+};
+
+export type MealSummarySettings = {
+  targets?: MealSummaryTarget[];
+  dailyLastSentDateStamp?: string;
+  weeklyLastSentEndDateStamp?: string;
 };
 
 type ZonedParts = {
@@ -204,6 +219,58 @@ export async function setTimezone(timeZone: string): Promise<void> {
   const settings = await loadSettings();
   settings.timezone = timeZone;
   await saveSettings(settings);
+}
+
+export async function rememberMealSummaryTarget(
+  target: MealSummaryTarget
+): Promise<void> {
+  const settings = await loadSettings();
+  const summary = settings.mealSummary || {};
+  const targets = summary.targets || [];
+  const existingIndex = targets.findIndex((item) => item.userId === target.userId);
+  const existing = existingIndex >= 0 ? targets[existingIndex] : null;
+
+  if (
+    existing &&
+    existing.chatId === target.chatId &&
+    existing.chatType === target.chatType &&
+    existing.username === target.username
+  ) {
+    return;
+  }
+
+  const nextTargets = [...targets];
+  if (existingIndex >= 0) {
+    nextTargets[existingIndex] = target;
+  } else {
+    nextTargets.push(target);
+  }
+
+  settings.mealSummary = {
+    ...summary,
+    targets: nextTargets,
+  };
+  await saveSettings(settings);
+}
+
+export async function getMealSummarySettings(): Promise<MealSummarySettings> {
+  const settings = await loadSettings();
+  return settings.mealSummary || {};
+}
+
+export async function updateMealSummarySettings(
+  updates: Partial<MealSummarySettings>
+): Promise<MealSummarySettings> {
+  const settings = await loadSettings();
+  const summary = settings.mealSummary || {};
+  const next = {
+    ...summary,
+    ...updates,
+  };
+
+  settings.mealSummary = next;
+  await saveSettings(settings);
+  return next;
 }
 
 export async function getDateTimeInfo(): Promise<DateTimeInfo> {

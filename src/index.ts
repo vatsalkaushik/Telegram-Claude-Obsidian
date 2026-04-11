@@ -7,6 +7,7 @@
 import { Bot } from "grammy";
 import { run, sequentialize } from "@grammyjs/runner";
 import { TELEGRAM_TOKEN, WORKING_DIR, ALLOWED_USERS } from "./config";
+import { startMealSummaryScheduler, rememberSummaryTargetFromContext } from "./meal-summary-scheduler";
 import {
   handleStart,
   handleNew,
@@ -20,9 +21,23 @@ import {
   handlePhoto,
   handleDocument,
 } from "./handlers";
+import { isAuthorized } from "./security";
 
 // Create bot instance
 const bot = new Bot(TELEGRAM_TOKEN);
+
+bot.use(async (ctx, next) => {
+  if (isAuthorized(ctx.from?.id, ALLOWED_USERS) && ctx.chat && ctx.from?.id) {
+    await rememberSummaryTargetFromContext({
+      userId: ctx.from.id,
+      username: ctx.from.username,
+      chatId: ctx.chat.id,
+      chatType: ctx.chat.type,
+    });
+  }
+
+  await next();
+});
 
 // Sequentialize non-command messages per user (prevents race conditions)
 // Commands bypass sequentialization so they work immediately
@@ -91,9 +106,11 @@ console.log(`Bot started: @${botInfo.username}`);
 
 // Start with concurrent runner (commands work immediately)
 const runner = run(bot);
+const stopMealSummaryScheduler = startMealSummaryScheduler(bot);
 
 // Graceful shutdown
 const stopRunner = () => {
+  stopMealSummaryScheduler();
   if (runner.isRunning()) {
     console.log("Stopping bot...");
     runner.stop();
