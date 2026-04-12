@@ -1,17 +1,15 @@
 /**
- * Structured meal analysis using OpenAI multimodal models.
+ * Structured meal analysis using Anthropic multimodal models.
  */
 
-import OpenAI from "openai";
+import Anthropic from "@anthropic-ai/sdk";
 import { extname } from "path";
 import { readFile } from "fs/promises";
 import { z } from "zod";
-import { zodResponseFormat } from "openai/helpers/zod";
 import {
-  MEAL_MODEL_FALLBACK,
-  MEAL_MODEL_PRIMARY,
+  ANTHROPIC_API_KEY,
+  MEAL_MODEL,
   MEAL_REFERENCE_FOODS_FILE,
-  OPENAI_API_KEY,
 } from "../config";
 import type { MealAnalysisResult, MealPhoto, MealType } from "./types";
 
@@ -41,9 +39,13 @@ export interface AnalyzeMealOutput {
   model: string;
 }
 
-const mealClient = OPENAI_API_KEY ? new OpenAI({ apiKey: OPENAI_API_KEY }) : null;
+const mealClient = ANTHROPIC_API_KEY
+  ? new Anthropic({ apiKey: ANTHROPIC_API_KEY })
+  : null;
 
-function getImageMimeType(filePath: string): string {
+function getImageMediaType(
+  filePath: string
+): "image/png" | "image/webp" | "image/gif" | "image/jpeg" {
   const extension = extname(filePath).toLowerCase();
   switch (extension) {
     case ".png":
@@ -57,12 +59,6 @@ function getImageMimeType(filePath: string): string {
   }
 }
 
-async function imageToDataUrl(filePath: string): Promise<string> {
-  const buffer = await readFile(filePath);
-  const mimeType = getImageMimeType(filePath);
-  return `data:${mimeType};base64,${buffer.toString("base64")}`;
-}
-
 async function loadReferenceFoods(): Promise<string> {
   try {
     return await readFile(MEAL_REFERENCE_FOODS_FILE, "utf-8");
@@ -71,14 +67,14 @@ async function loadReferenceFoods(): Promise<string> {
   }
 }
 
-function buildDeveloperPrompt(referenceFoods: string): string {
+function buildSystemPrompt(referenceFoods: string): string {
   const referenceSection = referenceFoods.trim()
     ? `\nReference foods:\n${referenceFoods.trim()}\n`
     : "\nReference foods: none provided.\n";
 
   return [
     "You analyze personal meal logs and estimate macros.",
-    "Return only the structured schema.",
+    "Return only valid JSON matching the tool schema.",
     "Estimate the amount actually consumed, not the amount served.",
     "Use the user note and any correction text to adjust portions or ingredients.",
     "Use reference foods exactly when they clearly match a branded or named staple.",
@@ -173,90 +169,96 @@ function buildAnalysisResult(
   };
 }
 
+const MEAL_ANALYSIS_TOOL: Anthropic.Messages.Tool = {
+  name: "meal_analysis",
+  description: "Record the structured macro analysis for a meal.",
+  input_schema: {
+    type: "object" as const,
+    properties: {
+      items: {
+        type: "array",
+        items: { type: "string", minLength: 1 },
+        minItems: 1,
+      },
+      calories: { type: "number", minimum: 0 },
+      protein: { type: "number", minimum: 0 },
+      carbs: { type: "number", minimum: 0 },
+      fat: { type: "number", minimum: 0 },
+      fiber: { type: "number", minimum: 0 },
+      confidence: { type: "string", enum: ["high", "medium", "low"] },
+    },
+    required: ["items", "calories", "protein", "carbs", "fat", "fiber", "confidence"],
+  },
+};
+
 async function runAnalysis(
   model: string,
   input: AnalyzeMealInput
 ): Promise<ParsedMealAnalysis> {
   if (!mealClient) {
-    throw new Error("Meal analysis is not configured. Set OPENAI_API_KEY in .env");
+    throw new Error("Meal analysis is not configured. Set ANTHROPIC_API_KEY in .env");
   }
 
-  const referenceFoods = await loadReferenceFoods();
-  const content: OpenAI.Chat.Completions.ChatCompletionContentPart[] = [
-    {
-      type: "text",
-      text: [
-        `Captured at: ${input.capturedAt}`,
-        `Time zone: ${input.timeZone}`,
-        `User note: ${input.note || "(none)"}`,
-        input.priorAnalysis
-          ? `Prior analysis: ${JSON.stringify(input.priorAnalysis)}`
-          : "",
-        input.correctionText
-          ? `Correction: ${input.correctionText}`
-          : "",
-      ]
-        .filter(Boolean)
-        .join("\n"),
-    },
-  ];
+  const [referenceFoods, ...imageBlocks] = await Promise.all([
+    loadReferenceFoods(),
+    ...input.photos.map(async (photo) => {
+      const buffer = await readFile(photo.fullPath);
+      return {
+        type: "image" as const,
+        source: {
+          type: "base64" as const,
+          media_type: getImageMediaType(photo.fullPath),
+          data: buffer.toString("base64"),
+        },
+      };
+    }),
+  ]);
 
-  for (const photo of input.photos) {
-    content.push({
-      type: "image_url",
-      image_url: {
-        url: await imageToDataUrl(photo.fullPath),
-        detail: "high",
-      },
-    });
-  }
+  const content: Anthropic.Messages.ContentBlockParam[] = [...imageBlocks];
 
-  const completion = await mealClient.chat.completions.parse({
-    model,
-    messages: [
-      {
-        role: "developer",
-        content: buildDeveloperPrompt(referenceFoods),
-      },
-      {
-        role: "user",
-        content,
-      },
-    ],
-    response_format: zodResponseFormat(MealAnalysisSchema, "meal_analysis"),
+  content.push({
+    type: "text",
+    text: [
+      `Captured at: ${input.capturedAt}`,
+      `Time zone: ${input.timeZone}`,
+      `User note: ${input.note || "(none)"}`,
+      input.priorAnalysis
+        ? `Prior analysis: ${JSON.stringify(input.priorAnalysis)}`
+        : "",
+      input.correctionText
+        ? `Correction: ${input.correctionText}`
+        : "",
+    ]
+      .filter(Boolean)
+      .join("\n"),
   });
 
-  const parsed = completion.choices[0]?.message.parsed;
-  if (!parsed) {
+  const response = await mealClient.messages.create({
+    model,
+    max_tokens: 1024,
+    system: buildSystemPrompt(referenceFoods),
+    tools: [MEAL_ANALYSIS_TOOL],
+    tool_choice: { type: "tool", name: "meal_analysis" },
+    messages: [{ role: "user", content }],
+  });
+
+  const toolBlock = response.content.find(
+    (block): block is Anthropic.Messages.ToolUseBlock => block.type === "tool_use"
+  );
+
+  if (!toolBlock) {
     throw new Error("Meal analysis returned no structured result");
   }
 
-  return parsed;
+  return MealAnalysisSchema.parse(toolBlock.input);
 }
 
 export async function analyzeMeal(
   input: AnalyzeMealInput
 ): Promise<AnalyzeMealOutput> {
-  const mustUseFallback = !!input.correctionText;
-  if (mustUseFallback) {
-    const parsed = await runAnalysis(MEAL_MODEL_FALLBACK, input);
-    return {
-      analysis: buildAnalysisResult(parsed, input),
-      model: MEAL_MODEL_FALLBACK,
-    };
-  }
-
-  const primary = await runAnalysis(MEAL_MODEL_PRIMARY, input);
-  if (primary.confidence === "low") {
-    const fallback = await runAnalysis(MEAL_MODEL_FALLBACK, input);
-    return {
-      analysis: buildAnalysisResult(fallback, input),
-      model: MEAL_MODEL_FALLBACK,
-    };
-  }
-
+  const parsed = await runAnalysis(MEAL_MODEL, input);
   return {
-    analysis: buildAnalysisResult(primary, input),
-    model: MEAL_MODEL_PRIMARY,
+    analysis: buildAnalysisResult(parsed, input),
+    model: MEAL_MODEL,
   };
 }

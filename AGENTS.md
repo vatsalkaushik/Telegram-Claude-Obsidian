@@ -29,7 +29,7 @@ Telegram message → Handler → Auth check → Rate limit → (capture or /Code
 - **`src/security.ts`** - `RateLimiter` (token bucket), path validation, command safety checks
 - **`src/vault.ts`** - Daily note append, auto-linking, timezone settings
 - **`src/formatting.ts`** - Markdown→HTML conversion for Telegram, tool status formatting
-- **`src/utils.ts`** - Audit logging, voice transcription (OpenAI), typing indicators
+- **`src/utils.ts`** - Audit logging, typing indicators
 - **`src/types.ts`** - Shared TypeScript types
 
 ### Handlers (`src/handlers/`)
@@ -38,7 +38,6 @@ Each message type has a dedicated async handler:
 - **`commands.ts`** - `/start`, `/new`, `/stop`, `/status`, `/resume`, `/Codex`, `/tz`
 - **`assistant.ts`** - `/Codex` handler with streaming responses
 - **`text.ts`** - Default capture to daily note
-- **`voice.ts`** - Voice→text via OpenAI, append to daily note
 - **`photo.ts`** - Save photos to Attachments and link in daily note
 - **`document.ts`** - Save documents to Attachments, append link and excerpt
 - **`streaming.ts`** - Shared `StreamingState` and status callback factory
@@ -61,14 +60,14 @@ All config via `.env` (copy from `.env.example`). Key variables:
 - `LINKS_FILE` - Auto-link list (one per line)
 - `BOT_SETTINGS_FILE` - Runtime settings (timezone override)
 - `ALLOWED_PATHS` - Directories Codex can access
-- `OPENAI_API_KEY` - For voice transcription
+- `ANTHROPIC_API_KEY` - For meal analysis
 
 MCP servers can be defined in `mcp-config.ts` (optional).
 
 ### Runtime Files
 
 - `/tmp/Codex-telegram-session.json` - Session persistence for `/resume`
-- `/tmp/telegram-bot/` - Temp voice downloads
+- `/tmp/telegram-bot/` - Temp bot data (reply routes)
 - `/tmp/Codex-telegram-audit.log` - Audit log
 
 ## Patterns

@@ -9,7 +9,6 @@ Default behavior is fast capture: any message becomes a timestamped entry in
 
 - Default capture to daily note with `[HH:MM]` timestamps
 - `/claude` assistant mode for search, questions, and actions
-- Voice transcription via OpenAI (optional)
 - Photo/document capture saved to `Attachments/` with links in the daily note
 - Auto-linking from `Links.md` (exact match only)
 - `/tz` command to update timezone while traveling
@@ -36,7 +35,7 @@ Recommended:
 - `VAULT_TIMEZONE` (default timezone, e.g., `Asia/Kolkata`)
 - `LINKS_FILE` (defaults to `VAULT_DIR/Links.md`)
 - `BOT_SETTINGS_FILE` (defaults to `VAULT_DIR/.bot/settings.json`)
-- `OPENAI_API_KEY` (for voice transcription)
+- `ANTHROPIC_API_KEY` (for meal analysis)
 
 ## Commands
 

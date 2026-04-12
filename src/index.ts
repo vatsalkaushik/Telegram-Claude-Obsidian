@@ -17,7 +17,6 @@ import {
   handleClaude,
   handleTimezone,
   handleText,
-  handleVoice,
   handlePhoto,
   handleDocument,
 } from "./handlers";
@@ -75,9 +74,6 @@ bot.command("tz", handleTimezone);
 
 // Text messages
 bot.on("message:text", handleText);
-
-// Voice messages
-bot.on("message:voice", handleVoice);
 
 // Photo messages
 bot.on("message:photo", handlePhoto);

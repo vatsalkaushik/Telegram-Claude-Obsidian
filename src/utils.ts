@@ -1,27 +1,16 @@
 /**
  * Utility functions for Obsidian Telegram Assistant.
  *
- * Audit logging, voice transcription, typing indicator.
+ * Audit logging, typing indicator.
  */
 
-import OpenAI from "openai";
 import type { Chat } from "grammy/types";
 import type { Context } from "grammy";
 import type { AuditEvent } from "./types";
 import {
   AUDIT_LOG_PATH,
   AUDIT_LOG_JSON,
-  OPENAI_API_KEY,
-  TRANSCRIPTION_PROMPT,
-  TRANSCRIPTION_AVAILABLE,
 } from "./config";
-
-// ============== OpenAI Client ==============
-
-let openaiClient: OpenAI | null = null;
-if (OPENAI_API_KEY && TRANSCRIPTION_AVAILABLE) {
-  openaiClient = new OpenAI({ apiKey: OPENAI_API_KEY });
-}
 
 // ============== Audit Logging ==============
 
@@ -143,30 +132,6 @@ export async function auditLogRateLimit(
     username,
     retry_after: retryAfter,
   });
-}
-
-// ============== Voice Transcription ==============
-
-export async function transcribeVoice(
-  filePath: string
-): Promise<string | null> {
-  if (!openaiClient) {
-    console.warn("OpenAI client not available for transcription");
-    return null;
-  }
-
-  try {
-    const file = Bun.file(filePath);
-    const transcript = await openaiClient.audio.transcriptions.create({
-      model: "gpt-4o-transcribe",
-      file: file,
-      prompt: TRANSCRIPTION_PROMPT,
-    });
-    return transcript.text;
-  } catch (error) {
-    console.error("Transcription failed:", error);
-    return null;
-  }
 }
 
 // ============== Typing Indicator ==============

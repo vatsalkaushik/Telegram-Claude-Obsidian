@@ -19,7 +19,7 @@
     "@grammyjs/runner": "^2.0.3",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "grammy": "^1.38.4",
-    "openai": "^6.15.0",
+    "@anthropic-ai/sdk": "^0.52.0",
     "zod": "^4.2.1"
   }
 }

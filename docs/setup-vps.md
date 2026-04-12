@@ -11,7 +11,6 @@ Before starting, you'll need:
 - A credit card for Hetzner (~€5/month)
 - A GitHub account
 - An Anthropic account (for Claude Code)
-- An OpenAI account (for voice transcription, optional)
 
 ---
 
@@ -337,8 +336,8 @@ VAULT_TIMEZONE=Europe/London
 # Security
 ALLOWED_PATHS=/home/claude/vault,/tmp
 
-# Optional: Voice transcription (get key from platform.openai.com)
-OPENAI_API_KEY=sk-...
+# Anthropic API key (for meal analysis)
+ANTHROPIC_API_KEY=sk-ant-api03-...
 
 # Optional: Use API key instead of claude login
 # ANTHROPIC_API_KEY=sk-ant-...
@@ -348,7 +347,7 @@ Replace:
 - `TELEGRAM_BOT_TOKEN` with your bot token from Step 1
 - `TELEGRAM_ALLOWED_USERS` with your Telegram user ID from Step 1
 - `VAULT_TIMEZONE` with your timezone (e.g., `Asia/Kolkata`, `America/New_York`, `Europe/Berlin`)
-- `OPENAI_API_KEY` with your OpenAI key (optional, for voice notes)
+- `ANTHROPIC_API_KEY` with your Anthropic key (for meal analysis)
 
 Save and exit (Ctrl+X, Y, Enter).
 
@@ -525,7 +524,7 @@ tail -f /home/claude/logs/vault-sync.log
 |---------|----------|
 | Bot not responding | `sudo systemctl status claude-telegram` — check for errors |
 | "Unauthorized" error | Verify `TELEGRAM_ALLOWED_USERS` matches your user ID |
-| Voice notes not working | Check `OPENAI_API_KEY` is set correctly |
+| Meal analysis not working | Check `ANTHROPIC_API_KEY` is set correctly |
 | Sync conflicts | Check `~/logs/vault-sync.log`, manually resolve in Git |
 | Claude auth expired | Run `claude login` and restart service |
 | Can't SSH to server | Check your IP hasn't changed; verify SSH key |
@@ -551,6 +550,6 @@ tail -f /home/claude/logs/vault-sync.log
 | Hetzner VPS (CX22) | ~€4.50/month |
 | GitHub Private Repos | Free |
 | Claude Code (with subscription) | $0 additional |
-| OpenAI Whisper API | ~$0.50-2/month |
+| Anthropic API (meal analysis) | ~$1-3/month |
 | Working Copy (iOS, one-time) | ~$20 |
 | **Total** | **~€5/month + one-time iOS cost** |

@@ -158,7 +158,7 @@ async function checkMealAccess(ctx: Context): Promise<{
   }
 
   if (!MEAL_ANALYSIS_AVAILABLE) {
-    await ctx.reply("Meal analysis is not configured. Set OPENAI_API_KEY in .env");
+    await ctx.reply("Meal analysis is not configured. Set ANTHROPIC_API_KEY in .env");
     return null;
   }
 
