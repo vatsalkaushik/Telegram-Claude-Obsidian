@@ -7,7 +7,7 @@
 import { Bot } from "grammy";
 import { run, sequentialize } from "@grammyjs/runner";
 import { TELEGRAM_TOKEN, WORKING_DIR, ALLOWED_USERS } from "./config";
-import { startMealSummaryScheduler, rememberSummaryTargetFromContext } from "./meal-summary-scheduler";
+import { startMealSummaryScheduler } from "./meal-summary-scheduler";
 import {
   handleStart,
   handleNew,
@@ -20,23 +20,9 @@ import {
   handlePhoto,
   handleDocument,
 } from "./handlers";
-import { isAuthorized } from "./security";
 
 // Create bot instance
 const bot = new Bot(TELEGRAM_TOKEN);
-
-bot.use(async (ctx, next) => {
-  if (isAuthorized(ctx.from?.id, ALLOWED_USERS) && ctx.chat && ctx.from?.id) {
-    await rememberSummaryTargetFromContext({
-      userId: ctx.from.id,
-      username: ctx.from.username,
-      chatId: ctx.chat.id,
-      chatType: ctx.chat.type,
-    });
-  }
-
-  await next();
-});
 
 // Sequentialize non-command messages per user (prevents race conditions)
 // Commands bypass sequentialization so they work immediately

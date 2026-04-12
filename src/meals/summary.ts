@@ -145,9 +145,12 @@ async function loadWeeklySummaries(
   let mealsLogged = 0;
 
   const startDateStamp = shiftDateStamp(endDateStamp, -6);
-  for (let offset = 0; offset < 7; offset += 1) {
-    const dateStamp = shiftDateStamp(startDateStamp, offset);
-    const dayLog = await loadMealDay(dateStamp);
+  const dateStamps = Array.from({ length: 7 }, (_, i) => shiftDateStamp(startDateStamp, i));
+  const dayLogs = await Promise.all(dateStamps.map(loadMealDay));
+
+  for (let i = 0; i < 7; i += 1) {
+    const dateStamp = dateStamps[i]!;
+    const dayLog = dayLogs[i]!;
     const dayTotals = computeTotals(dayLog);
     const mealCount = dayLog?.meals.length || 0;
 

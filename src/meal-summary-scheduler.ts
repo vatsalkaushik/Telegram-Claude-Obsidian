@@ -3,10 +3,10 @@
  */
 
 import type { Bot } from "grammy";
+import { ALLOWED_USERS } from "./config";
 import {
   getDateTimeInfoForDate,
   getMealSummarySettings,
-  rememberMealSummaryTarget,
   updateMealSummarySettings,
 } from "./vault";
 import { buildDailyMealSummary, buildWeeklyMealSummary, shiftDateStamp } from "./meals/summary";
@@ -15,13 +15,6 @@ import { auditLog } from "./utils";
 const DAILY_SUMMARY_TIME = "22:00";
 const WEEKLY_SUMMARY_TIME = "09:00";
 const CHECK_INTERVAL_MS = 60_000;
-
-type SummaryTargetContext = {
-  userId: number;
-  username?: string;
-  chatId: number;
-  chatType: string;
-};
 
 const WEEKDAY_INDEX: Record<string, number> = {
   Sunday: 0,
@@ -58,26 +51,18 @@ function getLatestDueWeeklyEndDate(
   return shiftDateStamp(dateStamp, -(weekdayIndex + 1));
 }
 
-async function sendToAllTargets(
+async function sendToAllUsers(
   bot: Bot,
   text: string
-): Promise<Array<{ userId: number; username?: string; chatId: number }>> {
-  const settings = await getMealSummarySettings();
-  const targets = settings.targets || [];
-  const delivered: Array<{ userId: number; username?: string; chatId: number }> = [];
+): Promise<number[]> {
+  const delivered: number[] = [];
 
-  for (const target of targets) {
+  for (const userId of ALLOWED_USERS) {
     try {
-      await bot.api.sendMessage(target.chatId, text, {
-        parse_mode: "HTML",
-      });
-      delivered.push({
-        userId: target.userId,
-        username: target.username,
-        chatId: target.chatId,
-      });
+      await bot.api.sendMessage(userId, text, { parse_mode: "HTML" });
+      delivered.push(userId);
     } catch (error) {
-      console.error("Failed to send meal summary:", error);
+      console.error(`Failed to send meal summary to ${userId}:`, error);
     }
   }
 
@@ -95,7 +80,7 @@ async function maybeSendDailySummary(bot: Bot): Promise<void> {
     return;
   }
 
-  const delivered = await sendToAllTargets(bot, await buildDailyMealSummary(now.dateStamp));
+  const delivered = await sendToAllUsers(bot, await buildDailyMealSummary(now.dateStamp));
   if (delivered.length === 0) {
     return;
   }
@@ -105,13 +90,8 @@ async function maybeSendDailySummary(bot: Bot): Promise<void> {
   });
 
   await Promise.all(
-    delivered.map((target) =>
-      auditLog(
-        target.userId,
-        target.username || "unknown",
-        "MEAL_SUMMARY_DAILY",
-        now.dateStamp
-      )
+    delivered.map((userId) =>
+      auditLog(userId, "unknown", "MEAL_SUMMARY_DAILY", now.dateStamp)
     )
   );
 }
@@ -134,7 +114,7 @@ async function maybeSendWeeklySummary(bot: Bot): Promise<void> {
   }
 
   const weeklyText = await buildWeeklyMealSummary(latestDueEndDate);
-  const delivered = await sendToAllTargets(bot, weeklyText);
+  const delivered = await sendToAllUsers(bot, weeklyText);
   if (delivered.length === 0) {
     return;
   }
@@ -144,31 +124,10 @@ async function maybeSendWeeklySummary(bot: Bot): Promise<void> {
   });
 
   await Promise.all(
-    delivered.map((target) =>
-      auditLog(
-        target.userId,
-        target.username || "unknown",
-        "MEAL_SUMMARY_WEEKLY",
-        latestDueEndDate
-      )
+    delivered.map((userId) =>
+      auditLog(userId, "unknown", "MEAL_SUMMARY_WEEKLY", latestDueEndDate)
     )
   );
-}
-
-export async function rememberSummaryTargetFromContext(
-  target: SummaryTargetContext
-): Promise<void> {
-  if (target.chatType !== "private") {
-    return;
-  }
-
-  await rememberMealSummaryTarget({
-    userId: target.userId,
-    username: target.username,
-    chatId: target.chatId,
-    chatType: target.chatType,
-    updatedAt: new Date().toISOString(),
-  });
 }
 
 export function startMealSummaryScheduler(bot: Bot): () => void {
