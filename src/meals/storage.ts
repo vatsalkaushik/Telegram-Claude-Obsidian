@@ -5,7 +5,7 @@
 import { mkdir, readFile, writeFile } from "fs/promises";
 import { dirname, join } from "path";
 import { MEAL_DATA_DIR } from "../config";
-import { getDailyNotePath, updateDailyNoteFile } from "../vault";
+import { getMealNotePath, updateDailyNoteFile } from "../vault";
 import type { MealDayLog, MealEntry, MealMacros } from "./types";
 
 const MEALS_SECTION_START = "## Meals\n<!-- bot:meals:start -->";
@@ -170,7 +170,7 @@ export async function addMealEntry(entry: MealEntry): Promise<MealDayLog> {
   next.updatedAt = new Date().toISOString();
 
   await saveMealDay(next);
-  await syncMealsToDailyNote(next);
+  await syncMealsToMealNote(next);
   return next;
 }
 
@@ -214,12 +214,12 @@ export async function updateMealEntry(
   day.updatedAt = new Date().toISOString();
 
   await saveMealDay(day);
-  await syncMealsToDailyNote(day);
+  await syncMealsToMealNote(day);
   return updated;
 }
 
-export async function syncMealsToDailyNote(dayLog: MealDayLog): Promise<string> {
-  const filePath = getDailyNotePath(dayLog.dateStamp, dayLog.weekday);
+export async function syncMealsToMealNote(dayLog: MealDayLog): Promise<string> {
+  const filePath = getMealNotePath(dayLog.dateStamp, dayLog.weekday);
   await updateDailyNoteFile(filePath, async () => {
     await mkdir(dirname(filePath), { recursive: true });
 

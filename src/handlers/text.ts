@@ -5,21 +5,15 @@
 import type { Context } from "grammy";
 import { ALLOWED_USERS } from "../config";
 import { isAuthorized, rateLimiter } from "../security";
-import { getReplyRoute } from "../reply-routes";
+import { getBotRouteScope, getReplyRoute } from "../reply-routes";
 import { auditLog, auditLogRateLimit } from "../utils";
 import { appendDailyEntry } from "../vault";
 import { handleAssistantMessage } from "./assistant";
-import {
-  extractMealCommandText,
-  handleMealCommand,
-  handleMealCorrection,
-  tryMergePendingMealReply,
-} from "./meal";
 
 /**
- * Handle incoming text messages.
+ * Handle incoming journal bot text messages.
  */
-export async function handleText(ctx: Context): Promise<void> {
+export async function handleJournalText(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   const username = ctx.from?.username || "unknown";
   const chatId = ctx.chat?.id;
@@ -38,33 +32,26 @@ export async function handleText(ctx: Context): Promise<void> {
   // 2. Reply routing
   const replyToMessageId = ctx.message?.reply_to_message?.message_id;
   if (replyToMessageId) {
-    const pendingMealText = extractMealCommandText(message) ?? message;
-    if (
-      await tryMergePendingMealReply(ctx, replyToMessageId, pendingMealText)
-    ) {
-      return;
-    }
-
-    const route = getReplyRoute(replyToMessageId);
-    if (route?.kind === "meal") {
-      await handleMealCorrection(ctx, pendingMealText, {
-        mealId: route.mealId,
-        dateStamp: route.dateStamp,
-      });
-      return;
-    }
+    const route = getReplyRoute(
+      getBotRouteScope(ctx.api.token),
+      chatId,
+      replyToMessageId
+    );
     if (route?.kind === "claude") {
       await handleAssistantMessage(ctx, message, {
         resumeSessionId: route.target,
       });
       return;
     }
+    if (route?.kind === "meal") {
+      await ctx.reply("Meals now go in the meals bot.");
+      return;
+    }
   }
 
-  // 3. /meal is handled inline so photo captions can own their own flow
-  const mealCommandText = extractMealCommandText(message);
-  if (mealCommandText !== null) {
-    await handleMealCommand(ctx);
+  // 3. Meals are handled by the dedicated meals bot.
+  if (message.trim().match(/^\/meal(?:@\w+)?(?:\s|$)/i)) {
+    await ctx.reply("Meals now go in the meals bot. Send the meal text there without /meal.");
     return;
   }
 
@@ -93,3 +80,5 @@ export async function handleText(ctx: Context): Promise<void> {
     await ctx.reply(`❌ Error: ${String(error).slice(0, 200)}`);
   }
 }
+
+export const handleText = handleJournalText;

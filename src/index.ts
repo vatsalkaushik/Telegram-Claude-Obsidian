@@ -4,74 +4,104 @@
  * Capture daily notes and access Claude via Telegram.
  */
 
-import { Bot } from "grammy";
+import { Bot, type Context } from "grammy";
 import { run, sequentialize } from "@grammyjs/runner";
-import { TELEGRAM_TOKEN, WORKING_DIR, ALLOWED_USERS } from "./config";
+import {
+  JOURNAL_TELEGRAM_TOKEN,
+  MEAL_TELEGRAM_TOKEN,
+  WORKING_DIR,
+  ALLOWED_USERS,
+} from "./config";
 import { startMealSummaryScheduler } from "./meal-summary-scheduler";
 import {
-  handleStart,
+  handleJournalStart,
+  handleMealStart,
+  handleMealRedirect,
   handleNew,
   handleStop,
   handleStatus,
   handleResume,
   handleClaude,
   handleTimezone,
-  handleText,
+  handleJournalText,
+  handleMealText,
   handlePhoto,
+  handleMealPhoto,
   handleDocument,
+  handleMealCommand,
 } from "./handlers";
 
-// Create bot instance
-const bot = new Bot(TELEGRAM_TOKEN);
+function useSequentialization(
+  bot: Bot<Context>,
+  serializedCommands: string[]
+): void {
+  const serialized = new Set(serializedCommands);
 
-// Sequentialize non-command messages per user (prevents race conditions)
-// Commands bypass sequentialization so they work immediately
-bot.use(
-  sequentialize((ctx) => {
-    // Commands are not sequentialized - they work immediately
-    if (ctx.message?.text?.startsWith("/")) {
-      const command = ctx.message.text.split(/\s+/)[0]?.toLowerCase();
-      if (command === "/claude" || command === "/meal") {
-        return ctx.chat?.id.toString();
+  bot.use(
+    sequentialize((ctx) => {
+      // Callback queries (button clicks) are not sequentialized.
+      if (ctx.callbackQuery) {
+        return undefined;
       }
-      return undefined;
-    }
-    // Callback queries (button clicks) are not sequentialized
-    if (ctx.callbackQuery) {
-      return undefined;
-    }
-    // Other messages are sequentialized per chat
-    return ctx.chat?.id.toString();
-  })
-);
 
-// ============== Command Handlers ==============
+      if (ctx.message?.text?.startsWith("/")) {
+        const command = ctx.message.text.split(/\s+/)[0]?.toLowerCase();
+        if (command && serialized.has(command)) {
+          return ctx.chat?.id.toString();
+        }
+        return undefined;
+      }
 
-bot.command("start", handleStart);
-bot.command("help", handleStart);
-bot.command("new", handleNew);
-bot.command("stop", handleStop);
-bot.command("status", handleStatus);
-bot.command("resume", handleResume);
-bot.command("claude", handleClaude);
-bot.command("tz", handleTimezone);
+      return ctx.chat?.id.toString();
+    })
+  );
+}
 
-// ============== Message Handlers ==============
+function registerJournalBot(bot: Bot<Context>): void {
+  useSequentialization(bot, ["/claude"]);
 
-// Text messages
-bot.on("message:text", handleText);
+  bot.command("start", handleJournalStart);
+  bot.command("help", handleJournalStart);
+  bot.command("meal", handleMealRedirect);
+  bot.command("new", handleNew);
+  bot.command("stop", handleStop);
+  bot.command("status", handleStatus);
+  bot.command("resume", handleResume);
+  bot.command("claude", handleClaude);
+  bot.command("tz", handleTimezone);
 
-// Photo messages
-bot.on("message:photo", handlePhoto);
+  bot.on("message:text", handleJournalText);
+  bot.on("message:photo", handlePhoto);
+  bot.on("message:document", handleDocument);
 
-// Document messages
-bot.on("message:document", handleDocument);
+  bot.catch((err) => {
+    console.error("Journal bot error:", err);
+  });
+}
 
-// ============== Error Handler ==============
+function registerMealBot(bot: Bot<Context>): void {
+  useSequentialization(bot, ["/meal"]);
 
-bot.catch((err) => {
-  console.error("Bot error:", err);
-});
+  bot.command("start", handleMealStart);
+  bot.command("help", handleMealStart);
+  bot.command("meal", handleMealCommand);
+  bot.command("tz", handleTimezone);
+
+  bot.on("message:text", handleMealText);
+  bot.on("message:photo", handleMealPhoto);
+
+  bot.catch((err) => {
+    console.error("Meal bot error:", err);
+  });
+}
+
+const journalBot = new Bot(JOURNAL_TELEGRAM_TOKEN);
+registerJournalBot(journalBot);
+
+const mealBot = MEAL_TELEGRAM_TOKEN ? new Bot(MEAL_TELEGRAM_TOKEN) : null;
+if (mealBot) {
+  registerMealBot(mealBot);
+}
 
 // ============== Startup ==============
 
@@ -80,22 +110,36 @@ console.log("Obsidian Telegram Assistant");
 console.log("=".repeat(50));
 console.log(`Working directory: ${WORKING_DIR}`);
 console.log(`Allowed users: ${ALLOWED_USERS.length}`);
+console.log(`Meal bot: ${mealBot ? "enabled" : "disabled"}`);
 console.log("Starting bot...");
 
 // Get bot info first
-const botInfo = await bot.api.getMe();
-console.log(`Bot started: @${botInfo.username}`);
+const journalBotInfo = await journalBot.api.getMe();
+console.log(`Journal bot started: @${journalBotInfo.username}`);
+
+if (mealBot) {
+  const mealBotInfo = await mealBot.api.getMe();
+  console.log(`Meal bot started: @${mealBotInfo.username}`);
+} else {
+  console.log("MEAL_TELEGRAM_BOT_TOKEN not set; meal bot not started.");
+}
 
 // Start with concurrent runner (commands work immediately)
-const runner = run(bot);
-const stopMealSummaryScheduler = startMealSummaryScheduler(bot);
+const runners = [run(journalBot)];
+if (mealBot) {
+  runners.push(run(mealBot));
+}
+
+const stopMealSummaryScheduler = startMealSummaryScheduler(mealBot || journalBot);
 
 // Graceful shutdown
 const stopRunner = () => {
   stopMealSummaryScheduler();
-  if (runner.isRunning()) {
-    console.log("Stopping bot...");
-    runner.stop();
+  for (const runner of runners) {
+    if (runner.isRunning()) {
+      console.log("Stopping bot...");
+      runner.stop();
+    }
   }
 };
 

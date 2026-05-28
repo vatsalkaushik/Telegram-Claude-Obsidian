@@ -1,7 +1,7 @@
 /**
  * Reply routing for bot-authored messages.
  *
- * Maps Telegram bot message IDs to internal targets such as Claude sessions.
+ * Maps Telegram bot/chat/message IDs to internal targets such as Claude sessions.
  */
 
 import { mkdir, readFile, writeFile } from "fs/promises";
@@ -22,7 +22,15 @@ export type ReplyRoute =
     };
 
 const MAX_ROUTES = 500;
-const replyRoutes = new Map<number, ReplyRoute>();
+const replyRoutes = new Map<string, ReplyRoute>();
+
+export function getBotRouteScope(token: string): string {
+  return token.split(":", 1)[0] || "bot";
+}
+
+function routeKey(botScope: string, chatId: number, messageId: number): string {
+  return `${botScope}:${chatId}:${messageId}`;
+}
 
 function pruneRoutes(): void {
   if (replyRoutes.size <= MAX_ROUTES) {
@@ -43,10 +51,7 @@ async function persistRoutes(): Promise<void> {
   await mkdir(dirname(REPLY_ROUTES_FILE), { recursive: true });
 
   const serialized = Object.fromEntries(
-    [...replyRoutes.entries()].map(([messageId, route]) => [
-      String(messageId),
-      route,
-    ])
+    [...replyRoutes.entries()].map(([key, route]) => [key, route])
   );
 
   await writeFile(REPLY_ROUTES_FILE, JSON.stringify(serialized, null, 2) + "\n");
@@ -57,18 +62,13 @@ async function loadRoutes(): Promise<void> {
     const content = await readFile(REPLY_ROUTES_FILE, "utf-8");
     const parsed = JSON.parse(content) as Record<string, ReplyRoute>;
 
-    for (const [messageId, route] of Object.entries(parsed)) {
-      const numericId = Number.parseInt(messageId, 10);
-      if (Number.isNaN(numericId)) {
-        continue;
-      }
-
+    for (const [key, route] of Object.entries(parsed)) {
       if (route?.kind === "claude" && route.target) {
-        replyRoutes.set(numericId, route);
+        replyRoutes.set(key, route);
       }
 
       if (route?.kind === "meal" && route.mealId && route.dateStamp) {
-        replyRoutes.set(numericId, route);
+        replyRoutes.set(key, route);
       }
     }
 
@@ -80,11 +80,21 @@ async function loadRoutes(): Promise<void> {
 
 await loadRoutes();
 
-export function getReplyRoute(messageId: number): ReplyRoute | undefined {
-  return replyRoutes.get(messageId);
+export function getReplyRoute(
+  botScope: string,
+  chatId: number,
+  messageId: number
+): ReplyRoute | undefined {
+  return (
+    replyRoutes.get(routeKey(botScope, chatId, messageId)) ||
+    replyRoutes.get(`${chatId}:${messageId}`) ||
+    replyRoutes.get(String(messageId))
+  );
 }
 
 export async function registerClaudeReplyTargets(
+  botScope: string,
+  chatId: number,
   messageIds: number[],
   sessionId: string
 ): Promise<void> {
@@ -94,7 +104,7 @@ export async function registerClaudeReplyTargets(
 
   const now = new Date().toISOString();
   for (const messageId of messageIds) {
-    replyRoutes.set(messageId, {
+    replyRoutes.set(routeKey(botScope, chatId, messageId), {
       kind: "claude",
       target: sessionId,
       updatedAt: now,
@@ -106,6 +116,8 @@ export async function registerClaudeReplyTargets(
 }
 
 export async function registerMealReplyTargets(
+  botScope: string,
+  chatId: number,
   messageIds: number[],
   mealId: string,
   dateStamp: string
@@ -116,7 +128,7 @@ export async function registerMealReplyTargets(
 
   const now = new Date().toISOString();
   for (const messageId of messageIds) {
-    replyRoutes.set(messageId, {
+    replyRoutes.set(routeKey(botScope, chatId, messageId), {
       kind: "meal",
       mealId,
       dateStamp,

@@ -326,11 +326,16 @@ Fill in these values:
 
 ```bash
 # Required
+JOURNAL_TELEGRAM_BOT_TOKEN=7123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+MEAL_TELEGRAM_BOT_TOKEN=8123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TELEGRAM_BOT_TOKEN=7123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TELEGRAM_ALLOWED_USERS=123456789
 
 # Vault settings
 VAULT_DIR=/home/claude/vault
+DAILY_DIR=/home/claude/vault/Daily
+MEALS_DIR=/home/claude/vault/Meals
+MEAL_DATA_DIR=/home/claude/vault/.bot/meals
 VAULT_TIMEZONE=Europe/London
 
 # Security
@@ -344,7 +349,9 @@ ANTHROPIC_API_KEY=sk-ant-api03-...
 ```
 
 Replace:
-- `TELEGRAM_BOT_TOKEN` with your bot token from Step 1
+- `JOURNAL_TELEGRAM_BOT_TOKEN` with your existing journal bot token
+- `MEAL_TELEGRAM_BOT_TOKEN` with your dedicated meals bot token
+- `TELEGRAM_BOT_TOKEN` with the journal bot token for legacy fallback
 - `TELEGRAM_ALLOWED_USERS` with your Telegram user ID from Step 1
 - `VAULT_TIMEZONE` with your timezone (e.g., `Asia/Kolkata`, `America/New_York`, `Europe/Berlin`)
 - `ANTHROPIC_API_KEY` with your Anthropic key (for meal analysis)

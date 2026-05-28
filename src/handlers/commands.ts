@@ -12,9 +12,9 @@ import { handleAssistantMessage } from "./assistant";
 import { getEffectiveTimezone, isValidTimeZone, setTimezone } from "../vault";
 
 /**
- * /start - Show welcome message and status.
+ * /start - Show journal bot welcome message and status.
  */
-export async function handleStart(ctx: Context): Promise<void> {
+export async function handleJournalStart(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
   const username = ctx.from?.username || "unknown";
 
@@ -27,7 +27,7 @@ export async function handleStart(ctx: Context): Promise<void> {
   const workDir = WORKING_DIR;
 
   await ctx.reply(
-    `🤖 <b>Obsidian Telegram Assistant</b>\n\n` +
+    `🤖 <b>Obsidian Journal Bot</b>\n\n` +
       `Default: any message is saved to today's daily note.\n` +
       `Assistant mode: each /claude starts a fresh chat.\n` +
       `Reply to a Claude answer to continue that specific chat.\n\n` +
@@ -35,7 +35,6 @@ export async function handleStart(ctx: Context): Promise<void> {
       `Working directory: <code>${workDir}</code>\n\n` +
       `<b>Commands:</b>\n` +
       `/claude &lt;message&gt; - Start a fresh Claude chat\n` +
-      `/meal &lt;description&gt; - Log a meal with macro estimates\n` +
       `/new - Reset the /claude conversation\n` +
       `/stop - Stop a running /claude response\n` +
       `/resume - Resume a saved /claude session after restart\n` +
@@ -45,11 +44,51 @@ export async function handleStart(ctx: Context): Promise<void> {
       `Leaving for the airport → saved to Daily with timestamp\n` +
       `/claude What did I do last Tuesday? → starts a new Claude thread\n` +
       `Reply "and Wednesday?" to that answer → continues the same thread\n` +
-      `/meal 2 scoops whey with water → logs a meal\n` +
-      `Photo caption "/meal ate half" → analyzes the meal photo\n` +
       `[[gym]] Did squats 5x5 → adds [[gym]] to Links.md`,
     { parse_mode: "HTML" }
   );
+}
+
+/**
+ * /start - Show meals bot welcome message.
+ */
+export async function handleMealStart(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+
+  if (!isAuthorized(userId, ALLOWED_USERS)) {
+    await ctx.reply("Unauthorized. Contact the bot owner for access.");
+    return;
+  }
+
+  const currentTimezone = await getEffectiveTimezone();
+
+  await ctx.reply(
+    `🍽️ <b>Meal Bot</b>\n\n` +
+      `Default: any message is logged as a meal with macro estimates.\n` +
+      `Photos are analyzed as meals; captions add details.\n` +
+      `Reply to a meal result to correct it.\n\n` +
+      `Timezone: <code>${currentTimezone}</code>\n\n` +
+      `<b>Commands:</b>\n` +
+      `/meal &lt;description&gt; - Optional explicit meal log\n` +
+      `/tz &lt;Region/City&gt; - Set timezone (e.g., /tz Asia/Kolkata)\n\n` +
+      `<b>Examples:</b>\n` +
+      `2 scoops whey with water → logs a meal\n` +
+      `Photo caption "ate half" → analyzes the meal photo`,
+    { parse_mode: "HTML" }
+  );
+}
+
+export const handleStart = handleJournalStart;
+
+export async function handleMealRedirect(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+
+  if (!isAuthorized(userId, ALLOWED_USERS)) {
+    await ctx.reply("Unauthorized.");
+    return;
+  }
+
+  await ctx.reply("Meals now go in the meals bot. Send the meal text there without /meal.");
 }
 
 /**

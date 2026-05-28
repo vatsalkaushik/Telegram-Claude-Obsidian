@@ -4,6 +4,9 @@
 
 export {
   handleStart,
+  handleJournalStart,
+  handleMealStart,
+  handleMealRedirect,
   handleNew,
   handleStop,
   handleStatus,
@@ -11,13 +14,14 @@ export {
   handleClaude,
   handleTimezone,
 } from "./commands";
-export { handleText } from "./text";
-export { handlePhoto } from "./photo";
+export { handleText, handleJournalText } from "./text";
+export { handlePhoto, handleMealPhoto } from "./photo";
 export { handleDocument } from "./document";
 export {
   extractMealCommandText,
   handleMealCommand,
   handleMealCorrection,
+  handleMealText,
   handleMealPhotos,
 } from "./meal";
 export { StreamingState, createStatusCallback } from "./streaming";

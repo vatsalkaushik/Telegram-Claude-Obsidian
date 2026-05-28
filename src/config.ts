@@ -33,7 +33,13 @@ process.env.PATH = pathParts.join(":");
 
 // ============== Core Configuration ==============
 
-export const TELEGRAM_TOKEN = process.env.TELEGRAM_BOT_TOKEN || "";
+export const JOURNAL_TELEGRAM_TOKEN =
+  process.env.JOURNAL_TELEGRAM_BOT_TOKEN ||
+  process.env.TELEGRAM_BOT_TOKEN ||
+  "";
+export const MEAL_TELEGRAM_TOKEN =
+  process.env.MEAL_TELEGRAM_BOT_TOKEN || "";
+export const TELEGRAM_TOKEN = JOURNAL_TELEGRAM_TOKEN;
 export const ALLOWED_USERS: number[] = (
   process.env.TELEGRAM_ALLOWED_USERS || ""
 )
@@ -52,6 +58,7 @@ const DEFAULT_TIMEZONE =
 export const VAULT_DIR = process.env.VAULT_DIR || WORKING_DIR;
 export const VAULT_TIMEZONE = process.env.VAULT_TIMEZONE || DEFAULT_TIMEZONE;
 export const DAILY_DIR = process.env.DAILY_DIR || resolve(VAULT_DIR, "Daily");
+export const MEALS_DIR = process.env.MEALS_DIR || resolve(VAULT_DIR, "Meals");
 export const ATTACHMENTS_DIR =
   process.env.ATTACHMENTS_DIR || resolve(VAULT_DIR, "Attachments");
 export const LINKS_FILE =
@@ -226,8 +233,20 @@ await Bun.write(`${TEMP_DIR}/.keep`, "");
 
 // ============== Validation ==============
 
-if (!TELEGRAM_TOKEN) {
-  console.error("ERROR: TELEGRAM_BOT_TOKEN environment variable is required");
+if (!JOURNAL_TELEGRAM_TOKEN) {
+  console.error(
+    "ERROR: JOURNAL_TELEGRAM_BOT_TOKEN or TELEGRAM_BOT_TOKEN environment variable is required"
+  );
+  process.exit(1);
+}
+
+if (
+  MEAL_TELEGRAM_TOKEN &&
+  MEAL_TELEGRAM_TOKEN === JOURNAL_TELEGRAM_TOKEN
+) {
+  console.error(
+    "ERROR: MEAL_TELEGRAM_BOT_TOKEN must be different from JOURNAL_TELEGRAM_BOT_TOKEN"
+  );
   process.exit(1);
 }
 

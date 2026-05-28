@@ -6,7 +6,7 @@ import type { Context } from "grammy";
 import { session } from "../session";
 import { ALLOWED_USERS } from "../config";
 import { isAuthorized, rateLimiter } from "../security";
-import { registerClaudeReplyTargets } from "../reply-routes";
+import { getBotRouteScope, registerClaudeReplyTargets } from "../reply-routes";
 import { auditLog, auditLogRateLimit, startTypingIndicator } from "../utils";
 import { StreamingState, createStatusCallback } from "./streaming";
 
@@ -85,6 +85,8 @@ export async function handleAssistantMessage(
 
       if (session.sessionId) {
         await registerClaudeReplyTargets(
+          getBotRouteScope(ctx.api.token),
+          chatId,
           state.getFinalMessages().map((msg) => msg.message_id),
           session.sessionId
         );

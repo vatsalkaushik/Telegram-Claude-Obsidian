@@ -13,7 +13,11 @@ import { escapeHtml } from "../formatting";
 import { analyzeMeal } from "../meals/analysis";
 import { addMealEntry, getMealEntry, updateMealEntry } from "../meals/storage";
 import type { MealEntry, MealPhoto } from "../meals/types";
-import { registerMealReplyTargets } from "../reply-routes";
+import {
+  getBotRouteScope,
+  getReplyRoute,
+  registerMealReplyTargets,
+} from "../reply-routes";
 import { isAuthorized, rateLimiter } from "../security";
 import { auditLog, auditLogRateLimit, startTypingIndicator } from "../utils";
 import { getDateTimeInfoForDate } from "../vault";
@@ -37,7 +41,15 @@ type PendingMealJob = {
   completed: boolean;
 };
 
-const pendingMealReplyRoutes = new Map<number, PendingMealJob>();
+const pendingMealReplyRoutes = new Map<string, PendingMealJob>();
+
+function pendingMealRouteKey(
+  botScope: string,
+  chatId: number,
+  messageId: number
+): string {
+  return `${botScope}:${chatId}:${messageId}`;
+}
 
 function formatMacro(value: number): string {
   return Number.isInteger(value) ? String(value) : value.toFixed(1);
@@ -97,12 +109,28 @@ function mergeMealNotes(existing: string, extra: string): string {
 }
 
 function registerPendingMealReplyTargets(job: PendingMealJob): void {
+  const chatId = job.ctx.chat?.id;
+  if (!chatId) {
+    return;
+  }
+  const botScope = getBotRouteScope(job.ctx.api.token);
+
   for (const messageId of job.sourceMessageIds) {
-    pendingMealReplyRoutes.set(messageId, job);
+    pendingMealReplyRoutes.set(
+      pendingMealRouteKey(botScope, chatId, messageId),
+      job
+    );
   }
 
   if (job.statusMessage) {
-    pendingMealReplyRoutes.set(job.statusMessage.messageId, job);
+    pendingMealReplyRoutes.set(
+      pendingMealRouteKey(
+        botScope,
+        job.statusMessage.chatId,
+        job.statusMessage.messageId
+      ),
+      job
+    );
   }
 }
 
@@ -193,7 +221,13 @@ async function sendMealSummary(
   const reply = await ctx.reply(buildMealSummary(entry, updated), {
     parse_mode: "HTML",
   });
+  const chatId = ctx.chat?.id;
+  if (!chatId) {
+    return;
+  }
   await registerMealReplyTargets(
+    getBotRouteScope(ctx.api.token),
+    chatId,
     [reply.message_id, ...extraReplyTargetIds],
     entry.id,
     entry.dateStamp
@@ -311,7 +345,13 @@ export async function tryMergePendingMealReply(
   replyToMessageId: number,
   noteText: string
 ): Promise<boolean> {
-  const job = pendingMealReplyRoutes.get(replyToMessageId);
+  const chatId = ctx.chat?.id;
+  const botScope = getBotRouteScope(ctx.api.token);
+  const job = chatId
+    ? pendingMealReplyRoutes.get(
+        pendingMealRouteKey(botScope, chatId, replyToMessageId)
+      )
+    : undefined;
   if (!job || job.completed) {
     return false;
   }
@@ -333,20 +373,18 @@ export async function tryMergePendingMealReply(
   return true;
 }
 
-export async function handleMealCommand(ctx: Context): Promise<void> {
+async function handleMealTextEntry(
+  ctx: Context,
+  note: string,
+  emptyMessage: string
+): Promise<void> {
   const access = await checkMealAccess(ctx);
   if (!access) {
     return;
   }
 
-  const note =
-    (ctx.match || "").toString().trim() ||
-    extractMealCommandText(ctx.message?.text) ||
-    "";
   if (!note) {
-    await ctx.reply(
-      "Use /meal <what you ate> for text-only meals, or add /meal in a photo caption."
-    );
+    await ctx.reply(emptyMessage);
     return;
   }
 
@@ -382,6 +420,61 @@ export async function handleMealCommand(ctx: Context): Promise<void> {
   } finally {
     typing.stop();
   }
+}
+
+export async function handleMealCommand(ctx: Context): Promise<void> {
+  const note =
+    (ctx.match || "").toString().trim() ||
+    extractMealCommandText(ctx.message?.text) ||
+    "";
+
+  await handleMealTextEntry(
+    ctx,
+    note,
+    "Use /meal <what you ate> for text-only meals, or add /meal in a photo caption."
+  );
+}
+
+export async function handleMealText(ctx: Context): Promise<void> {
+  const message = ctx.message?.text;
+  const chatId = ctx.chat?.id;
+  if (!message || !chatId) {
+    return;
+  }
+
+  const replyToMessageId = ctx.message?.reply_to_message?.message_id;
+  if (replyToMessageId) {
+    const pendingMealText = extractMealCommandText(message) ?? message;
+    if (
+      await tryMergePendingMealReply(ctx, replyToMessageId, pendingMealText)
+    ) {
+      return;
+    }
+
+    const route = getReplyRoute(
+      getBotRouteScope(ctx.api.token),
+      chatId,
+      replyToMessageId
+    );
+    if (route?.kind === "meal") {
+      await handleMealCorrection(ctx, pendingMealText, {
+        mealId: route.mealId,
+        dateStamp: route.dateStamp,
+      });
+      return;
+    }
+  }
+
+  const mealCommandText = extractMealCommandText(message);
+  if (message.startsWith("/") && mealCommandText === null) {
+    return;
+  }
+
+  await handleMealTextEntry(
+    ctx,
+    (mealCommandText ?? message).trim(),
+    "Send what you ate, or send a meal photo."
+  );
 }
 
 export async function handleMealPhotos(

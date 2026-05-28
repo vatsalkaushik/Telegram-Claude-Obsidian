@@ -8,6 +8,7 @@ import {
   BOT_SETTINGS_FILE,
   DAILY_DIR,
   LINKS_FILE,
+  MEALS_DIR,
   VAULT_TIMEZONE,
 } from "./config";
 
@@ -254,6 +255,10 @@ export async function getDateTimeInfoForDate(date: Date): Promise<DateTimeInfo> 
 
 export function getDailyNotePath(dateStamp: string, weekday: string): string {
   return join(DAILY_DIR, `${dateStamp}, ${weekday}.md`);
+}
+
+export function getMealNotePath(dateStamp: string, weekday: string): string {
+  return join(MEALS_DIR, `${dateStamp}, ${weekday}.md`);
 }
 
 export async function updateDailyNoteFile<T>(

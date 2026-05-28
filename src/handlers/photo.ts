@@ -14,7 +14,6 @@ import { createMediaGroupBuffer } from "./media-group";
 import { appendDailyEntry, getDateTimeInfo } from "../vault";
 import { extractMealCommandText, handleMealPhotos } from "./meal";
 
-// Create photo-specific media group buffer
 const photoBuffer = createMediaGroupBuffer<{
   fullPath: string;
   relativePath: string;
@@ -24,6 +23,17 @@ const photoBuffer = createMediaGroupBuffer<{
   emoji: "📷",
   itemLabel: "photo",
   itemLabelPlural: "photos",
+});
+
+const mealPhotoBuffer = createMediaGroupBuffer<{
+  fullPath: string;
+  relativePath: string;
+  telegramFileId?: string;
+  sourceMessageId: number;
+}>({
+  emoji: "🍽️",
+  itemLabel: "meal photo",
+  itemLabelPlural: "meal photos",
 });
 
 /**
@@ -92,26 +102,6 @@ async function processPhotos(
 ): Promise<void> {
   void chatId;
   try {
-    const mealNote = extractMealCommandText(caption);
-    if (mealNote !== null) {
-      await handleMealPhotos(
-        ctx,
-        photoPaths.map((photo) => ({
-          fullPath: photo.fullPath,
-          relativePath: photo.relativePath,
-          telegramFileId: photo.telegramFileId,
-        })),
-        mealNote,
-        {
-        skipRateLimit: true,
-          sourceMessageIds: photoPaths
-            .map((photo) => photo.sourceMessageId)
-            .filter((id) => id > 0),
-        }
-      );
-      return;
-    }
-
     const embeds = photoPaths
       .map((p) => `![[${p.relativePath}]]`)
       .join(" ");
@@ -126,8 +116,43 @@ async function processPhotos(
   }
 }
 
+async function processMealPhotos(
+  ctx: Context,
+  photoPaths: Array<{
+    fullPath: string;
+    relativePath: string;
+    telegramFileId?: string;
+    sourceMessageId: number;
+  }>,
+  caption: string | undefined,
+  userId: number,
+  username: string,
+  chatId: number
+): Promise<void> {
+  void userId;
+  void username;
+  void chatId;
+
+  const mealNote = extractMealCommandText(caption) ?? caption?.trim() ?? "";
+  await handleMealPhotos(
+    ctx,
+    photoPaths.map((photo) => ({
+      fullPath: photo.fullPath,
+      relativePath: photo.relativePath,
+      telegramFileId: photo.telegramFileId,
+    })),
+    mealNote,
+    {
+      skipRateLimit: true,
+      sourceMessageIds: photoPaths
+        .map((photo) => photo.sourceMessageId)
+        .filter((id) => id > 0),
+    }
+  );
+}
+
 /**
- * Handle incoming photo messages.
+ * Handle incoming journal bot photo messages.
  */
 export async function handlePhoto(ctx: Context): Promise<void> {
   const userId = ctx.from?.id;
@@ -147,7 +172,6 @@ export async function handlePhoto(ctx: Context): Promise<void> {
 
   // 2. For single photos, show status and rate limit early
   let statusMsg: Awaited<ReturnType<typeof ctx.reply>> | null = null;
-  const mealCaption = extractMealCommandText(ctx.message?.caption);
   if (!mediaGroupId) {
     console.log(`Received photo from @${username}`);
     // Rate limit
@@ -161,9 +185,7 @@ export async function handlePhoto(ctx: Context): Promise<void> {
     }
 
     // Show status immediately
-    statusMsg = await ctx.reply(
-      mealCaption !== null ? "🍽️ Analyzing meal..." : "📷 Processing image..."
-    );
+    statusMsg = await ctx.reply("📷 Processing image...");
   }
 
   // 3. Download photo
@@ -196,30 +218,6 @@ export async function handlePhoto(ctx: Context): Promise<void> {
 
   // 4. Single photo - process immediately
   if (!mediaGroupId && statusMsg) {
-    if (mealCaption !== null) {
-      await handleMealPhotos(
-        ctx,
-        [
-          {
-            fullPath: photoPath.fullPath,
-            relativePath: photoPath.relativePath,
-            telegramFileId: photoPath.telegramFileId,
-          },
-        ],
-        mealCaption,
-        {
-          skipRateLimit: true,
-          sourceMessageIds:
-            typeof ctx.message?.message_id === "number" ? [ctx.message.message_id] : [],
-          statusMessage: {
-            chatId: statusMsg.chat.id,
-            messageId: statusMsg.message_id,
-          },
-        }
-      );
-      return;
-    }
-
     await processPhotos(
       ctx,
       [photoPath],
@@ -247,5 +245,110 @@ export async function handlePhoto(ctx: Context): Promise<void> {
     userId,
     username,
     processPhotos
+  );
+}
+
+/**
+ * Handle incoming meals bot photo messages.
+ */
+export async function handleMealPhoto(ctx: Context): Promise<void> {
+  const userId = ctx.from?.id;
+  const username = ctx.from?.username || "unknown";
+  const chatId = ctx.chat?.id;
+  const mediaGroupId = ctx.message?.media_group_id;
+
+  if (!userId || !chatId) {
+    return;
+  }
+
+  if (!isAuthorized(userId, ALLOWED_USERS)) {
+    await ctx.reply("Unauthorized. Contact the bot owner for access.");
+    return;
+  }
+
+  const mealCaption =
+    extractMealCommandText(ctx.message?.caption) ??
+    ctx.message?.caption?.trim() ??
+    "";
+
+  let statusMsg: Awaited<ReturnType<typeof ctx.reply>> | null = null;
+  if (!mediaGroupId) {
+    console.log(`Received meal photo from @${username}`);
+    const [allowed, retryAfter] = rateLimiter.check(userId);
+    if (!allowed) {
+      await auditLogRateLimit(userId, username, retryAfter!);
+      await ctx.reply(
+        `⏳ Rate limited. Please wait ${retryAfter!.toFixed(1)} seconds.`
+      );
+      return;
+    }
+
+    statusMsg = await ctx.reply(
+      mealCaption
+        ? "🍽️ Analyzing meal..."
+        : "🍽️ Analyzing meal... Reply now if you want to add details."
+    );
+  }
+
+  let photoPath: {
+    fullPath: string;
+    relativePath: string;
+    telegramFileId?: string;
+    sourceMessageId: number;
+  };
+  try {
+    photoPath = await downloadPhoto(ctx);
+  } catch (error) {
+    console.error("Failed to download meal photo:", error);
+    if (statusMsg) {
+      try {
+        await ctx.api.editMessageText(
+          statusMsg.chat.id,
+          statusMsg.message_id,
+          "❌ Failed to download photo."
+        );
+      } catch (editError) {
+        console.debug("Failed to edit status message:", editError);
+        await ctx.reply("❌ Failed to download photo.");
+      }
+    } else {
+      await ctx.reply("❌ Failed to download photo.");
+    }
+    return;
+  }
+
+  if (!mediaGroupId && statusMsg) {
+    await handleMealPhotos(
+      ctx,
+      [
+        {
+          fullPath: photoPath.fullPath,
+          relativePath: photoPath.relativePath,
+          telegramFileId: photoPath.telegramFileId,
+        },
+      ],
+      mealCaption,
+      {
+        skipRateLimit: true,
+        sourceMessageIds:
+          typeof ctx.message?.message_id === "number" ? [ctx.message.message_id] : [],
+        statusMessage: {
+          chatId: statusMsg.chat.id,
+          messageId: statusMsg.message_id,
+        },
+      }
+    );
+    return;
+  }
+
+  if (!mediaGroupId) return;
+
+  await mealPhotoBuffer.addToGroup(
+    mediaGroupId,
+    photoPath,
+    ctx,
+    userId,
+    username,
+    processMealPhotos
   );
 }
