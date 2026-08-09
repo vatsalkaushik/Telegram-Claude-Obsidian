@@ -9,6 +9,7 @@ import { run, sequentialize } from "@grammyjs/runner";
 import {
   JOURNAL_TELEGRAM_TOKEN,
   MEAL_TELEGRAM_TOKEN,
+  MEAL_SUMMARIES_ENABLED,
   WORKING_DIR,
   ALLOWED_USERS,
 } from "./config";
@@ -111,6 +112,7 @@ console.log("=".repeat(50));
 console.log(`Working directory: ${WORKING_DIR}`);
 console.log(`Allowed users: ${ALLOWED_USERS.length}`);
 console.log(`Meal bot: ${mealBot ? "enabled" : "disabled"}`);
+console.log(`Meal summaries: ${MEAL_SUMMARIES_ENABLED ? "enabled" : "disabled"}`);
 console.log("Starting bot...");
 
 // Get bot info first
@@ -130,7 +132,9 @@ if (mealBot) {
   runners.push(run(mealBot));
 }
 
-const stopMealSummaryScheduler = startMealSummaryScheduler(mealBot || journalBot);
+const stopMealSummaryScheduler = MEAL_SUMMARIES_ENABLED
+  ? startMealSummaryScheduler(mealBot || journalBot)
+  : () => {};
 
 // Graceful shutdown
 const stopRunner = () => {

@@ -39,6 +39,8 @@ export const JOURNAL_TELEGRAM_TOKEN =
   "";
 export const MEAL_TELEGRAM_TOKEN =
   process.env.MEAL_TELEGRAM_BOT_TOKEN || "";
+export const MEAL_SUMMARIES_ENABLED =
+  (process.env.MEAL_SUMMARIES_ENABLED || "true").toLowerCase() === "true";
 export const TELEGRAM_TOKEN = JOURNAL_TELEGRAM_TOKEN;
 export const ALLOWED_USERS: number[] = (
   process.env.TELEGRAM_ALLOWED_USERS || ""

@@ -31,6 +31,7 @@ Required:
 
 - `JOURNAL_TELEGRAM_BOT_TOKEN` (falls back to `TELEGRAM_BOT_TOKEN`)
 - `MEAL_TELEGRAM_BOT_TOKEN` (optional; enables the dedicated meals bot)
+- `MEAL_SUMMARIES_ENABLED` (optional; defaults to `true`, set to `false` to disable daily/weekly summaries)
 - `TELEGRAM_ALLOWED_USERS`
 
 Recommended:

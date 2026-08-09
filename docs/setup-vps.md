@@ -328,6 +328,8 @@ Fill in these values:
 # Required
 JOURNAL_TELEGRAM_BOT_TOKEN=7123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 MEAL_TELEGRAM_BOT_TOKEN=8123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+# Set to false to keep the bots running without daily/weekly meal summaries.
+MEAL_SUMMARIES_ENABLED=true
 TELEGRAM_BOT_TOKEN=7123456789:AAHxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TELEGRAM_ALLOWED_USERS=123456789
 
